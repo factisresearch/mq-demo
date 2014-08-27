@@ -1,0 +1,27 @@
+#!/bin/bash
+
+p="$1"
+
+isInstalled() {
+    ghc-pkg list | grep -qE "\<$1\>-[0-9.]+" >/dev/null
+}
+
+hideInstalled() {
+    if isInstalled $1; then
+        echo "$p-hide-package $p$1"
+    fi
+}
+
+echo \
+    $p-pgmPcpphs \
+    $p-optP--cpp \
+    $p-idist/build/autogen \
+    $p-ibuild/gen-hs \
+    $p-isrc/lib \
+    $p-XFlexibleInstances \
+    $p-XMultiParamTypeClasses \
+    $p-XDeriveDataTypeable \
+    $(hideInstalled monads-fd) \
+    $(hideInstalled monads-tf) \
+    $(hideInstalled MaybeT-transformers) \
+    $(hideInstalled test-framework)

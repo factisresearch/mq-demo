@@ -1,0 +1,33 @@
+#!/bin/bash
+
+GHC=ghc
+
+# Filters these stupid "Loading package ..." when executing template Haskell
+# echo "starting $GHC $@"
+"$GHC" "$@" | grep -v '^Loading package '
+ecode_ghc=${PIPESTATUS[0]}
+# echo "finished $GHC $@"
+
+hs_files=""
+while [ ! -z "$1" ]
+do
+    case "$1" in
+        src/*.hs )
+            hs_files="$hs_files $1"
+    esac
+    shift
+done
+if [ ! -z "$hs_files" ]
+then
+    scripts/syncheck-all --no-word-check $hs_files
+    ecode_syncheck=$?
+else
+    ecode_syncheck=0
+fi
+
+if [ $ecode_ghc -ne 0 ]
+then
+    exit $ecode_ghc
+else
+    exit $ecode_syncheck
+fi

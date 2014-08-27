@@ -1,0 +1,22 @@
+module Mgw.Util.Ansi where
+
+_RESET_              = "\o33[0;0m"
+_BOLD_               = "\o33[1m"
+_REVERSE_            = "\o33[2m"
+
+_BLACK_              = "\o33[0;30m"
+_BLUE_               = "\o33[0;34m"
+_GREEN_              = "\o33[0;32m"
+_CYAN_               = "\o33[0;36m"
+_RED_                = "\o33[0;31m"
+_PURPLE_             = "\o33[0;35m"
+_BROWN_              = "\o33[0;33m"
+_GRAY_               = "\o33[0;37m"
+_DARK_GRAY_          = "\o33[1;30m"
+_LIGHT_BLUE_         = "\o33[1;34m"
+_LIGHT_GREEN_        = "\o33[1;32m"
+_LIGHT_CYAN_         = "\o33[1;36m"
+_LIGHT_RED_          = "\o33[1;31m"
+_LIGHT_PURPLE_       = "\o33[1;35m"
+_YELLOW_             = "\o33[1;33m"
+_WHITE_              = "\o33[1;37m"

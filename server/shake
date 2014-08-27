@@ -1,0 +1,102 @@
+#!/bin/bash
+
+HERE=$(cd $(dirname ${BASH_SOURCE[0]}) > /dev/null && pwd -P)
+cd "$HERE"
+
+lockdir=.shake-lock
+if mkdir "$lockdir" 2>/dev/null; then
+    # Remove lockdir when the script finishes, or when it receives a signal
+    trap 'rm -rf "$lockdir"' 0    # remove directory when script finishes
+else
+    echo -e >&2 "Cannot run two Shake instances at the same time!" \
+                "\n\nIn case of a mistake on my side, rm .shake-lock"
+    exit 1
+fi
+
+#STRACE="strace -tt -f -e trace=open,close -o strace.log"
+BUILD="build/build/Shake"
+GHC=ghc
+FIND=find
+# packages required to build the build system
+SHAKE_PACKAGES="base shake-0.8 deepseq split filepath directory containers "\
+"safe unix process hashable binary-0.7.1.0 Cabal mtl text bytestring temporary"
+LOCAL_CFG="user.shake"
+
+# WARNING: Do not specify -N here!! There seems to be an RTS bug that
+# causes strange error such as this one:
+# build/lib/Mgw/Model/Version.deps: openBinaryFile: resource busy (file is locked)
+RTS_OPTS="+RTS -RTS"
+
+GHC_OPTS="-threaded -rtsopts"
+# GHC_OPTS="-threaded -rtsopts -auto-all -prof"
+
+if [ ! -z $(which gfind 2> /dev/null) ]
+then
+    FIND=gfind
+fi
+
+function my_stat()
+{
+    if [ "$(uname)" == "Darwin" ]
+    then
+        stat -f '%m' "$@"
+    else
+        stat -c '%Y' "$@"
+    fi
+}
+
+if [ -e "$LOCAL_CFG" ]
+then
+    source "$LOCAL_CFG"
+fi
+
+if [ ! -z "$way" ]
+then
+    build_opts="--way $way"
+fi
+
+for x in "$@"
+do
+    if [ "$x" == "clean" ]
+    then
+        echo "Cleanup..."
+        $FIND build -maxdepth 1 -mindepth 1 -not -name build | xargs rm -rf
+        echo "Done"
+    fi
+    if [ "$x" == "dist-clean" ]
+    then
+        echo "Dist-cleanup..."
+        rm -rf build
+        echo "Done"
+    fi
+done
+
+chmod +x scripts/{my-ghc,gencode.sh}
+
+if [ -e "$BUILD" ]
+then
+    newest_src=$(my_stat $0 src/build/* | sort | tail -1)
+    time_build=$(my_stat "$BUILD")
+    if [ $time_build -gt $newest_src ]
+    then
+        $STRACE "$BUILD" $RTS_OPTS $build_opts "$@"
+        ecode=$?
+        exit $ecode
+    fi
+fi
+
+echo "Rebuilding build system..."
+mkdir -p build/build
+pkg_flags="-hide-all-packages"
+for p in $SHAKE_PACKAGES
+do
+    pkg_flags="${pkg_flags} -package $p"
+done
+$GHC -o "$BUILD" --make -O2 $pkg_flags $GHC_OPTS -isrc/build -outputdir build/build \
+  src/build/Main.hs \
+  || exit 1
+touch "$BUILD"
+echo "Done"
+$STRACE "$BUILD" $RTS_OPTS $build_opts "$@"
+ecode=$?
+exit $ecode

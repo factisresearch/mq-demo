@@ -1,0 +1,43 @@
+MessageQueue example, derived from code from the
+Checkpad project (http://checkpad.de)
+
+Copyright (c) 2000-2014, factis research GmbH
+
+The code in this package is not supported in any way,
+it only serves for demonstration purpose.
+
+INSTALL
+-------
+
+Requirements: 
+
+* GHC 7.6.*
+* Haskell packages as mentioned in MessageQueue.cabal. See
+  the comment at the top of MessageQueue.cabal for how to
+  install the Haskell packages.
+* Cabal <= 1.18
+
+Building:
+
+$ chmod 755 prepare shake
+$ ./prepare
+$ ./shake MessageQueueRecvClient MessageQueueSendClient MessageQueueServer MessageQueueTests
+
+
+RUNNING
+-------
+
+Here are some commands for creating a sample session. Execute
+the commands from different shells:
+
+# start a server
+$ scripts/run MessageQueueServer 9876 STORE @queue1 queue2 --loglevels=DEFAULT:DEBUG
+
+# start a client for receiving messages
+$ scripts/run MessageQueueRecvClient 127.0.0.1 9876 queue1
+
+# send some messages
+$ scripts/run MessageQueueSendClient 127.0.0.1 9876 queue1 msg-id bar
+
+# run the tests
+$ scripts/run MessageQueueTests

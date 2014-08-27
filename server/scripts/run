@@ -1,0 +1,104 @@
+#!/bin/bash
+usage() {
+    echo >&2 "Usage: $0 [-c] EXECUTABLE-NAME [-Nx|--prof|--prof-c|--proc-h|--prof-r|-D?] ARGS..."
+    echo >&2 "Example: $0 ItemsToObjs -N3"
+    echo >&2 "Example: $0 WebIf --prof"
+    exit 1
+}
+
+if [ -z "$1" -o "$1" = "-h" -o "$1" = "--help" ]; then
+    usage
+fi
+
+if [ "$1" == "-c" ]; then
+    COMPILE="yes"
+    shift
+else
+    COMPILE="no"
+fi
+
+EXEC_DIR="build"
+EXECNAME="$1"
+EXEC1="$EXEC_DIR/${EXECNAME}"
+EXEC2="$EXEC_DIR/${EXECNAME}_p"
+EXEC3="$EXEC_DIR/${EXECNAME}_f"
+ALLEXECS="$EXEC1 $EXEC2 $EXEC3"
+
+TY="$2"
+shift
+if [ -e "user.shake" ]; then
+    source user.shake
+fi
+PROF="no"
+if [ "${TY:0:6}" == "--prof" -o "$way" == "p" ]; then
+    PROF="yes"
+    VALIDFILES="$EXEC2"
+elif [ "$way" == "f" ]; then
+    VALIDFILES="$EXEC3"
+elif [ "${TY:0:2}" == "-N" ]; then
+    VALIDFILES="$EXEC1 $EXEC3"
+else
+    VALIDFILES=$ALLEXECS
+fi
+
+if [ "$COMPILE" == "yes" -a -d src ]; then
+    if [ "$PROF" == "yes" ]; then
+        ./shake --prof $DGW_MAKEOPTS "$EXECNAME" || exit 1
+    else
+        ./shake $DGW_MAKEOPTS "$EXECNAME" || exit 1
+    fi
+fi
+
+AVAILFILES=""
+for x in $VALIDFILES; do
+    if [ -e $x ]; then
+        AVAILFILES="$AVAILFILES $x"
+    fi
+done
+
+if [ -z "$AVAILFILES" ]; then
+    echo >&2 "None of $VALIDFILES is available."
+    exit 1
+fi
+
+EXECFILE=""
+for x in $AVAILFILES; do
+    if [ -z "$EXECFILE" -o \( "$x" -nt "$EXECFILE" \) ]; then
+        EXECFILE="$x"
+    fi
+done
+
+for x in $ALLEXECS; do
+    if [ -e "$x" -a "$x" -nt "$EXECFILE" ]; then
+        echo >&2 "Warning! $x is newer than chosen executable $EXECFILE."
+        echo >&2 "Probably you forgot to build or chose the wrong flags."
+        echo >&2 "I'll check that it's current by building it."
+        ./shake $EXECNAME
+    fi
+done
+
+echo "Chose $EXECFILE for execution." >&2
+
+if [ "${TY:0:2}" == "-N" ]; then
+    shift
+    if [ "${TY:2:1}" == "" ] || [ \( "${TY:2}" -gt 0 -a "${TY:2}" -lt 100 \) ]; then
+        RTS="${TY}"
+    else
+        usage
+    fi
+elif [ "${TY:0:6}" == "--prof" ]; then
+    shift
+    if [ "${TY:7:1}" != "" ]; then
+        RTS="-s -p -L55 -h${TY:7:1}"
+    else
+        RTS="-s -p -L55"
+    fi
+elif [ "${TY:0:2}" == "-D" ]; then
+    shift
+    RTS="$TY"
+else
+    # don't shift
+    RTS=""
+fi
+
+$EXECFILE +RTS $RTS -RTS "$@"

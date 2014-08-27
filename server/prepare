@@ -1,0 +1,24 @@
+#!/bin/bash
+
+HERE=$(cd $(dirname ${BASH_SOURCE[0]}) > /dev/null && pwd -P)
+cd "$HERE"
+
+set -e
+
+function check_prog()
+{
+    if [ -z $(which "$1" 2> /dev/null) ]
+    then
+        echo "ERROR: $1 not found in PATH"
+        exit 1
+    fi
+}
+
+echo "Running 'cabal configure'"
+cabal configure
+chmod +x shake
+
+echo
+echo "checking that all required programs are present"
+check_prog hprotoc
+

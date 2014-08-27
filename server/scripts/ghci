@@ -1,0 +1,20 @@
+#!/bin/bash
+
+GHCI=""
+my_dir=$(cd $(dirname ${BASH_SOURCE[0]}) > /dev/null && pwd -P)
+while read line; do
+    if [ "$(cd $(dirname $line) > /dev/null && pwd -P)" != "$my_dir" ]; then
+        GHCI=$line
+        break
+    fi
+done < <(which -a ghci)
+
+if [ -z "$GHCI" ]
+then
+    echo "No GHCi found"
+    exit 1
+fi
+
+BASEDIR=$(cd $(dirname $0)/.. &>/dev/null; pwd -P)
+SCRIPTDIR="$BASEDIR/scripts"
+$GHCI $($SCRIPTDIR/ghcopts) "$@"

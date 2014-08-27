@@ -1,0 +1,25 @@
+package com.factisresearch.checkpad.protos.messageQueue;
+
+message ServerMessage {
+  optional ServerQueues queues = 1;
+  optional PublishMessage publishMessage = 2;
+}
+
+message ServerQueues {
+  repeated string queues = 1;
+}
+
+message PublishMessage {
+  optional string queueName = 1;
+  optional string messageId = 2;
+  optional bytes payload = 3;
+}
+
+message ClientMessage {
+  optional ClientSubscribe subscribe = 1;
+  optional PublishMessage publishMessage = 2;
+}
+
+message ClientSubscribe {
+  optional string queueName = 1;
+}
