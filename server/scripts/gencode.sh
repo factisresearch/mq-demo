@@ -5,7 +5,7 @@ cd "$HERE"/../.. > /dev/null
 
 TRINITY=server/build/Trinity_f
 PROTOC=protoc
-HPROTOC=hprotoc
+HPROTOC=server/.cabal-sandbox/bin/hprotoc
 
 if [ "$1" = "--help" -o "$1" = "-h" -o -z "$1" -o -z "$2" -o -z "$3" -o -z "$4" -o -z "$5" ]
 then

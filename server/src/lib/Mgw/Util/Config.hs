@@ -16,9 +16,9 @@ module Mgw.Util.Config
 -- STDLIB
 ----------------------------------------
 import Control.Monad (liftM, foldM)
-import Control.Monad.Identity (Identity, runIdentity)
-import Control.Monad.Error (ErrorT, MonadError, runErrorT, throwError)
-import Control.Monad.Writer (WriterT, runWriterT, tell)
+import Control.Monad.Identity (runIdentity)
+import Control.Monad.Error (ErrorT, runErrorT, throwError)
+import Control.Monad.Writer (runWriterT, tell)
 import Control.Monad.State (StateT, runStateT, execStateT, modify)
 import Control.Monad.Trans (lift)
 import Control.Monad.Fix (mfix)

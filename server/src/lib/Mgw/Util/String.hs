@@ -41,6 +41,10 @@ splitWs = filter (\x -> x /= []) . splitRegex (mkRegex "[ \t\n\r\v\f]+")
 
 replace :: Eq a => [a] -> [a] -> [a] -> [a]
 replace old new l = join new . split old $ l
+    where
+      join :: [a] -> [[a]] -> [a]
+      join delim l = concat (intersperse delim l)
+
 
 split :: Eq a => [a] -> [a] -> [[a]]
 split _ [] = []
@@ -64,9 +68,6 @@ spanList func list@(x:xs) =
        then (x:ys,zs)
        else ([],list)
     where (ys,zs) = spanList func xs
-
-join :: [a] -> [[a]] -> [a]
-join delim l = concat (intersperse delim l)
 
 shorten' :: String -> Int -> String -> String
 shorten' cont maxLen s =

@@ -13,7 +13,6 @@ where
 ----------------------------------------
 -- LOCAL
 ----------------------------------------
-import Mgw.Util.SafeCopy hiding (Version)
 import Mgw.Util.BaseCoding
 import Mgw.Util.QcPropHelper
 import Mgw.Util.Preview
@@ -41,7 +40,7 @@ import Data.Typeable
 import GHC.Generics (Generic)
 import qualified Text.PrettyPrint.HughesPJ as P
 
-newtype Hash = Hash { unHash :: BS.ByteString } deriving (Eq, Ord, Typeable, Generic, SafeCopy)
+newtype Hash = Hash { unHash :: BS.ByteString } deriving (Eq, Ord, Typeable, Generic)
 
 class SecHash a where
     toSecHashRepr :: a -> BSL.ByteString

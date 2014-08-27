@@ -82,7 +82,11 @@ data BuildArgs
 buildRules :: BuildCfg -> BuildArgs -> Rules ()
 buildRules cfg buildArgs =
     do pkgMap <- addOracle $ \PkgMapKey{} ->
-           do (dump, _) <- systemOutput "ghc-pkg" ["dump","--simple-output"]
+           do inSandbox <- doesFileExist (bc_sandboxFile cfg)
+              Stdout dump <-
+                  if inSandbox
+                  then command [] "cabal" ["sandbox", "hc-pkg", "dump", "--", "--simple-output"]
+                  else command [] "ghc-pkg" ["dump","--simple-output"]
               let pkgsFile = bc_packageFile cfg
               exists <- doesFileExist pkgsFile
               unless exists $ fail ("Package file " ++ pkgsFile ++
@@ -361,7 +365,7 @@ buildRules cfg buildArgs =
           any (\prefix -> prefix `List.isPrefixOf` mod) (bc_generatedHsModulePrefixes cfg)
       phony f action = (phonyFile cfg f) *> \out ->
                        do action
-                          system' "touch" [out]
+                          command_ [] "touch" [out]
 
 phonyFile :: BuildCfg -> String -> FilePath
 phonyFile cfg name = bc_outDir cfg </> ".phony" </> name

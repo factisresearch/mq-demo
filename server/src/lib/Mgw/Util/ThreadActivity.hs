@@ -17,7 +17,7 @@ import Prelude
 import Control.Exception (SomeException, throwIO)
 import Control.Exception.Lifted (catch, finally)
 import Control.Monad (liftM)
-import Control.Monad.Trans (MonadIO, liftIO)
+import Control.Monad.Trans (liftIO)
 import Control.Concurrent.STM (STM)                   -- Mgw.Util.STM introduces cycle
 
 import Data.Map (Map)

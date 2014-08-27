@@ -20,5 +20,4 @@ chmod +x shake
 
 echo
 echo "checking that all required programs are present"
-check_prog hprotoc
-
+check_prog .cabal-sandbox/bin/hprotoc

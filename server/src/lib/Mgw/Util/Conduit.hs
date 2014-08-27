@@ -32,7 +32,7 @@ import Control.Monad
 import Data.Conduit
 import Data.Foldable (Foldable)
 import Data.Traversable (Traversable)
-import Control.Monad.Trans (MonadIO, liftIO, lift)
+import Control.Monad.Trans (liftIO, lift)
 import Test.Framework
 import qualified Data.Conduit.List as CL
 import qualified Data.Conduit.TMChan as CS

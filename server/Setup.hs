@@ -21,15 +21,8 @@ packagesOutputFile = ".packages"
 
 outputPackages :: LocalBuildInfo -> IO ()
 outputPackages lbi =
-    do let namesAndCompLocBuildInfos =
-               executableConfigs lbi ++
-               case libraryConfig lbi of
-                 Nothing -> []
-                 Just x -> [("LIB", x)]
-           packages =
-               concatMap (\(_, ComponentLocalBuildInfo clbis) ->
-                              (map (show . disp . fst) clbis))
-                         namesAndCompLocBuildInfos
+    do let packages =
+               map (\(InstalledPackageId pid, _) -> pid) $ externalPackageDeps lbi
        writeFile packagesOutputFile (unlines packages)
 
 -- generated .package file

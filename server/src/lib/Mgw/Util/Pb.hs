@@ -22,6 +22,7 @@ module Mgw.Util.Pb (
 ----------------------------------------
 -- STDLIB
 ----------------------------------------
+import Control.Applicative
 import Control.Monad (MonadPlus, mplus, mzero, liftM)
 import Control.Monad.Error (MonadError(throwError, catchError), ErrorT(runErrorT))
 import Control.Monad.Maybe (MaybeT(runMaybeT))
@@ -288,7 +289,8 @@ newtype SimConnState = SimConnState (Map.Map SimConnId [BSL.ByteString])
 instance Show SimConnState where
     show _ = "<SimmConnState>"
 
-newtype SimConnM a = SimConnM { unSimConnM :: ErrorT String (State SimConnState) a } deriving Monad
+newtype SimConnM a = SimConnM { unSimConnM :: ErrorT String (State SimConnState) a }
+    deriving (Functor, Applicative, Monad)
 
 instance LogMonad SimConnM where
     doLog _ _ _ _ _ = return ()

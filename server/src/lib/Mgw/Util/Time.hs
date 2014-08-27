@@ -8,6 +8,7 @@ module Mgw.Util.Time
 
 #include "src/macros.h"
 
+import Control.Applicative
 import Control.Monad.Trans.Resource (ResourceT)
 
 import Mgw.Util.STM
@@ -104,7 +105,7 @@ formatClockTimeForHuman = formatXsdDateTimeForHuman . clockTimeToXsdDateTime
 
 newtype StaticTimeT m a
     = StaticTimeT (Strict.StateT T.ClockTime m a)
-    deriving (Monad, MonadIO)
+    deriving (Functor, Applicative, Monad, MonadIO)
 
 instance MonadTrans StaticTimeT where
     lift = StaticTimeT . lift

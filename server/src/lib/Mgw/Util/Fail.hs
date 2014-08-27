@@ -105,12 +105,19 @@ instance MonadFix Fail where
     mfix f = let a = f (unOk a) in a
         where
           unOk (Ok x) = x
-          unOk (Fail msg) = safeError ("mfix failed: " ++ msg)
+          unOk (Fail msg) = safeError ("mfix failed: " ++ (msg :: String))
 
 instance Monad m => Monad (FailT m) where
     return = returnFailT
     fail = FailT . return . Fail
     (>>=) = bindFailT
+
+instance Applicative m => Applicative (FailT m) where
+    pure = pureFailT
+    (<*>) = appFailT
+
+instance Functor f => Functor (FailT f) where
+    fmap f (FailT x) = FailT (fmap (fmap f) x)
 
 failBind :: Fail a -> (a -> Fail b) -> Fail b
 failBind ma f =
@@ -161,6 +168,15 @@ bindFailT (FailT action) f =
        case mx of
          Ok x -> unFailT (f x)
          Fail m -> return (Fail m)
+
+{-# INLINE pureFailT #-}
+pureFailT :: Applicative m => a -> FailT m a
+pureFailT = FailT . pure . Ok
+
+{-# INLINE appFailT #-}
+appFailT :: Applicative m => FailT m (a -> b) -> (FailT m a) -> FailT m b
+appFailT (FailT f) (FailT x) =
+    FailT (fmap failAp f <*> x)
 
 instance MonadError String Fail where
     throwError             = Fail

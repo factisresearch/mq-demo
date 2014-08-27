@@ -1,10 +1,15 @@
 #!/bin/bash
 
-GHC=ghc
+HERE=$(cd $(dirname ${BASH_SOURCE[0]}) > /dev/null && pwd -P)
 
 # Filters these stupid "Loading package ..." when executing template Haskell
 # echo "starting $GHC $@"
-"$GHC" "$@" | grep -v '^Loading package '
+GHC=ghc
+if [[ -f "$HERE/../cabal.sandbox.config" ]]; then
+    GHC="cabal exec ghc --"
+fi
+$GHC "$@" | grep -v '^Loading package '
+
 ecode_ghc=${PIPESTATUS[0]}
 # echo "finished $GHC $@"
 

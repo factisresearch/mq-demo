@@ -21,6 +21,7 @@ import Control.Monad.Trans.Resource (ResourceT)
 ----------------------------------------
 -- STDLIB
 ----------------------------------------
+import Control.Applicative
 import Control.Monad
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.Trans (MonadIO, MonadTrans(..))
@@ -145,7 +146,7 @@ doLogWithLevel :: LogMonad m => String -> Int -> LogLevel -> String -> m ()
 doLogWithLevel fn li level msg = doLog (adjustSourceFilePath fn) li level noExtraLogInfo (Left msg)
 
 newtype LogT m a = LogT (ReaderT (LogFun m) m a)
-    deriving (Monad, MonadIO)
+    deriving (Functor, Applicative, Monad, MonadIO)
 
 instance Monad m => LogMonad (LogT m) where
     doLog file line level extraInfo msg =

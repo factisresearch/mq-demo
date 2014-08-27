@@ -24,6 +24,7 @@ module Mgw.Util.DynConfig
 
 import Prelude
 
+import Control.Applicative
 import Control.Monad (when)
 import Control.Monad.Error (ErrorT, Error)
 import Control.Monad.State (StateT)
@@ -294,7 +295,7 @@ instance HasDynCfg m => HasDynCfg (ReaderT s m) where
     unregisterDynCfgChangeHook = lift . unregisterDynCfgChangeHook
 
 newtype StaticDynCfgT m a = StaticDynCfgT { _unStaticDynCfg :: ReaderT DynConfig m a }
-    deriving Monad
+    deriving (Functor, Applicative, Monad)
 
 instance Monad m => HasDynCfg (StaticDynCfgT m) where
     getDynValue f = StaticDynCfgT (asks (dynCfgItem_value . f))

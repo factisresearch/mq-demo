@@ -29,7 +29,6 @@ data MyOptions
       , opts_debug :: Bool
       , opts_quiet :: Bool
       , opts_way :: String
-      , opts_deterministic :: Bool
       , opts_fakeGhc :: Bool
       , opts_jobs :: Int
       , opts_shakeProfile :: Bool
@@ -47,7 +46,6 @@ defaultOptions =
       , opts_way = ""
       , opts_shakeProfile = False
       , opts_jobs = defaultNumberOfJobs
-      , opts_deterministic = False
       , opts_fakeGhc = False
       , opts_listTargets = False
       , opts_help = False
@@ -76,9 +74,6 @@ options =
      , Option ['j'] ["jobs"]
          (ReqArg (\arg opt -> opt { opts_jobs = readNote "invalid number of jobs" arg }) "N")
          ("Number of parallel jobs (default: " ++ show defaultNumberOfJobs ++ ")")
-     , Option [] ["deterministic"]
-         (NoArg (\opt -> opt { opts_deterministic = True }))
-         "Run deterministic build, implies '-j 1'"
      , Option ['v'] ["verbose"]
          (NoArg (\opt -> opt { opts_verbose = True }))
          "Verbose output"
@@ -158,7 +153,7 @@ main =
        let cleanedTargets = filter (\t -> not (t `elem` cleanTargets)) targets
        noteIO ("Starting build, targets: " ++
                if null cleanedTargets then "-" else List.intercalate ", " cleanedTargets)
-       linkRes <- newResource "ghc-link" 1
+       linkRes <- newResourceIO "ghc-link" 1
        let buildArgs = BuildArgs { ba_linkResource = linkRes
                                  , ba_fakeGhc = opts_fakeGhc opts
                                  }
@@ -176,13 +171,12 @@ main =
                do putStrLn (t ++ (fromMaybe "" (fmap (\d -> " (" ++ d ++ ")") md)))
       mkShakeOptions opts =
           shakeOptions { shakeVerbosity = opts_shakeVerbosity opts
-                       , shakeVersion = myShakeVersion
+                       , shakeVersion = show myShakeVersion
                        , shakeReport = if opts_shakeProfile opts
-                                          then Just shakeProfileFile
-                                          else Nothing
-                       , shakeDeterministic = opts_deterministic opts
-                       , shakeThreads = if opts_deterministic opts then 1 else opts_jobs opts
-                       , shakeLint = True
+                                          then [shakeProfileFile]
+                                          else []
+                       , shakeThreads = opts_jobs opts
+                       , shakeLint = Just LintBasic
                        , shakeFiles = bc_outDir cfg </> ".shake"
                        }
       cfg = myBuildCfg

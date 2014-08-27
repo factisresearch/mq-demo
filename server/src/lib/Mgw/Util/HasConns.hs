@@ -14,11 +14,12 @@ module Mgw.Util.HasConns (
 ----------------------------------------
 -- STDLIB
 ----------------------------------------
+import Control.Applicative
 import Control.Monad (liftM)
 import Control.Monad.Error (MonadError(..))
 import Control.Monad.Maybe (MaybeT(..))
 import Control.Monad.Reader (ReaderT)
-import Control.Monad.Trans (MonadTrans, lift)
+import Control.Monad.Trans (lift)
 import Data.Int (Int64)
 import qualified Control.Monad.State as S
 
@@ -107,7 +108,7 @@ instance HasConns m e => HasConns (ReaderT r m) e where
     closeSocket = lift . closeSocket
 
 newtype ConnReader m e a = ConnReader (S.StateT (BSL.ByteString, Conn m) m a)
-    deriving (Monad, LogMonad)
+    deriving (Functor, Applicative, Monad, LogMonad)
 
 runConnReader :: HasConns m e => Conn m -> ConnReader m e a -> m (a, BSL.ByteString)
 runConnReader conn (ConnReader s) =

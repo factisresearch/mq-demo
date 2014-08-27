@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 HERE=$(cd $(dirname ${BASH_SOURCE[0]}) > /dev/null && pwd -P)
 cd "$HERE"
 
@@ -15,10 +17,9 @@ fi
 
 #STRACE="strace -tt -f -e trace=open,close -o strace.log"
 BUILD="build/build/Shake"
-GHC=ghc
 FIND=find
 # packages required to build the build system
-SHAKE_PACKAGES="base shake-0.8 deepseq split filepath directory containers "\
+SHAKE_PACKAGES="base shake-0.13.2 deepseq split filepath directory containers "\
 "safe unix process hashable binary-0.7.1.0 Cabal mtl text bytestring temporary"
 LOCAL_CFG="user.shake"
 
@@ -39,7 +40,7 @@ function my_stat()
 {
     if [ "$(uname)" == "Darwin" ]
     then
-        stat -f '%m' "$@"
+        /usr/bin/stat -f '%m' "$@"
     else
         stat -c '%Y' "$@"
     fi
@@ -92,11 +93,19 @@ for p in $SHAKE_PACKAGES
 do
     pkg_flags="${pkg_flags} -package $p"
 done
+
+GHC=ghc
+if [[ -f "$HERE/cabal.sandbox.config" ]]; then
+    echo "Detected cabal sandbox"
+    GHC="cabal exec ghc --"
+fi
+
 $GHC -o "$BUILD" --make -O2 $pkg_flags $GHC_OPTS -isrc/build -outputdir build/build \
-  src/build/Main.hs \
-  || exit 1
+    src/build/Main.hs \
+    || exit 1
+
 touch "$BUILD"
 echo "Done"
-$STRACE "$BUILD" $RTS_OPTS $build_opts "$@"
+$STRACE "$BUILD" --shake-profile $RTS_OPTS $build_opts "$@"
 ecode=$?
 exit $ecode

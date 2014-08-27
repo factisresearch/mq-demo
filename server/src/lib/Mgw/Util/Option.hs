@@ -75,6 +75,10 @@ instance Monad m => Monad (OptionT m) where
   return = lift . return
   x >>= f = OptionT (runOptionT x >>= option (return None) (runOptionT . f))
 
+instance Applicative m => Applicative (OptionT m) where
+    pure = OptionT . pure . Some
+    OptionT f <*> OptionT x = OptionT (fmap (<*>) f <*> x)
+
 instance Ord a => Ord (Option a) where
     compare x y =
         case x of

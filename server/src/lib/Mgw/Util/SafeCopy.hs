@@ -62,26 +62,6 @@ safeDecodeLazy bs = eitherToFail (runGetLazy safeGet bs)
 safeDecode' :: (Monad m, SafeCopy a) => BSL.ByteString -> m a
 safeDecode' bsl = eitherToFail (runGetLazy safeGet bsl)
 
-vector_getCopy :: SafeCopy a => Contained (Get (V.Vector a))
-vector_getCopy =
-    contain $
-    do getElem <- getSafeGet
-       len <- safeGet
-       V.generateM len (const getElem)
-{-# INLINE vector_getCopy #-}
-
-vector_putCopy :: SafeCopy a => V.Vector a -> Contained Put
-vector_putCopy vec =
-    contain $
-    do putElem <- getSafePut
-       safePut (V.length vec)
-       V.mapM_ putElem vec
-{-# INLINE vector_putCopy #-}
-
-instance SafeCopy a => SafeCopy (V.Vector a) where
-    getCopy = vector_getCopy
-    putCopy = vector_putCopy
-
 newtype OldOSMap k v = OldOSMap { unOldOSMap :: OSMap k v }
 
 instance (Ord k, SafeCopy k, SafeCopy v) => SafeCopy (OldOSMap k v) where
