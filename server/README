@@ -1,27 +1,45 @@
-MessageQueue example, derived from code from the
-Checkpad project (http://checkpad.de)
+MessageQueue example, derived from code from the Checkpad project
+(http://checkpad.de). This code is used for the tutorials at Hal9
+(http://iba-cg.de/hal9.html) and at CUFP
+(http://cufp.org/2014/t2-stefan-wehr-haskell-in-the-real-world.html)
 
 Copyright (c) 2000-2014, factis research GmbH
 
-The code in this package is not supported in any way,
-it only serves for demonstration purpose.
+The code in this package is not supported in any way, it only serves for
+demonstration purpose.
 
 INSTALL
 -------
 
 Requirements: 
 
-* GHC 7.6.*
-* Haskell packages as mentioned in MessageQueue.cabal. See
-  the comment at the top of MessageQueue.cabal for how to
-  install the Haskell packages.
-* Cabal <= 1.18
+* Haskell platform, version 2014.2.0.0. See
+  https://www.haskell.org/platform/ to download the software and for
+  installation instructions.
+
+  After installation: make sure that you are using alex and happy from the
+  platform (and not some older versions in your PATH)
+   
+* Cabal 1.20. By default, the platform has Cabal version 1.18, so you need
+  to install the newer cabal version by hand:
+  
+  - Run 'cabal update'
+  - Run 'cabal install cabal-install' (may take some time)
+  - Make sure that invoking 'cabal --version' indicates that you are using
+    version 1.20.* of cabal
+
+Preparations:
+
+* Make sure you are in the 'server' subdirectory of this project (the same
+  directory as this file resides in)
+* Run 'cabal sandbox init'
+* Run 'cabal install --only-dependencies' (may take some time)
+* Run 'chmod 755 prepare shake'
+* Run './prepare'
 
 Building:
 
-$ chmod 755 prepare shake
-$ ./prepare
-$ ./shake MessageQueueRecvClient MessageQueueSendClient MessageQueueServer MessageQueueTests
+* Run './shake MessageQueueRecvClient MessageQueueSendClient MessageQueueServer MessageQueueTests'
 
 
 RUNNING
