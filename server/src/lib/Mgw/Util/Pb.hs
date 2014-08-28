@@ -48,11 +48,10 @@ import Text.ProtocolBuffers
 import Text.ProtocolBuffers.Get (Result(..))
 import Text.ProtocolBuffers.Basic (Utf8(..))
 import Text.ProtocolBuffers.Unknown (UnknownField)
-import Control.Monad.Trans.Resource
 
+import qualified System.IO.Streams as Streams
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Conduit as C
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text as T
 import qualified Data.String
@@ -68,7 +67,6 @@ import Mgw.Util.HasConns (HasConns(..), runConnReader, readConnReaderWithTimeout
 import Mgw.Util.Text () -- instances
 import Mgw.Util.Orphans ()
 import Mgw.Util.Preview
-import Mgw.Util.Conduit ()
 
 _TAG_MESSAGES_ :: Bool
 _TAG_MESSAGES_ = False
@@ -235,13 +233,15 @@ readPrologue timeout magic conn =
           in if n < limit then s else take limit s ++ " ..."
 
 pbufSerialize ::
-    (ReflectDescriptor w, Wire w, Preview w, LogMonad m, MonadResourceBase m)
+    (ReflectDescriptor w, Wire w, Preview w)
     => String
-    -> C.Conduit w m BS.ByteString
-pbufSerialize session = C.awaitForever f
+    -> Streams.OutputStream BS.ByteString
+    -> IO (Streams.OutputStream w)
+pbufSerialize session =
+    Streams.contramapM serialize
     where
       fn = session ++ ".out"
-      f pb =
+      serialize pb =
           do let bslRaw = runPut (messageWithLengthPutM pb)
                  rawPlus = if _TAG_MESSAGES_
                               then BSL.concat [ _OPEN_TAG_
@@ -253,32 +253,33 @@ pbufSerialize session = C.awaitForever f
              logInfoWithTag "pbuf-send" (session ++ ": serializing " ++ shortLogMsg)
              appendTraceWithTag "pbuf-send" fn (Left shortLogMsg)
              appendTraceWithTag "pbuf-send" fn (Left (bsToBase16String (BSL.toStrict rawPlus)))
-             --M.mapM_ C.yield (BSL.toChunks rawPlus)
-             C.yield (BSL.toStrict rawPlus)
+             return (BSL.toStrict rawPlus)
 
 pbufParse ::
-    (ReflectDescriptor w, Wire w, Show w, LogMonad m, MonadResourceBase m)
+    (ReflectDescriptor w, Wire w, Show w)
     => String
-    -> C.Conduit BS.ByteString m w
-pbufParse session = new
+    -> Streams.InputStream BS.ByteString
+    -> IO (Streams.InputStream w)
+pbufParse session input =
+    Streams.makeInputStream (producePb parseFull)
     where
       fn = session ++ ".in"
-      new = read (runGet messageWithLengthGetM . BSL.fromChunks . (:[]))
-      read parse =
-          do mbs <- C.await
+      parseFull = runGet messageWithLengthGetM . BSL.fromChunks . (:[])
+      producePb parse =
+          do mbs <- Streams.read input
              case mbs of
                Just bs -> checkResult (parse bs)
-               Nothing -> return ()
+               Nothing -> return Nothing
       checkResult result =
           case result of
             Failed _ errmsg -> fail errmsg
-            Partial cont -> read (cont . Just . BSL.fromChunks . (:[]))
-            Finished rest _ msg -> finished rest msg
-      finished rest pb =
-          do logInfoWithTag "pbuf-recv" (session ++ ": parsed " ++ show pb)
-             appendTraceWithTag "pbuf-recv" fn (Left (show pb))
-             C.yield pb
-             checkResult (runGet messageWithLengthGetM rest)
+            Partial cont -> producePb (cont . Just . BSL.fromChunks . (:[]))
+            Finished rest _ pb ->
+                do logInfoWithTag "pbuf-recv" (session ++ ": parsed " ++ show pb)
+                   appendTraceWithTag "pbuf-recv" fn (Left (show pb))
+                   Streams.unRead (BSL.toStrict rest) input
+                   return (Just pb)
+
 --
 -- Mock connection for tests
 --

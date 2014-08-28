@@ -20,13 +20,11 @@ import qualified Com.Factisresearch.Checkpad.Protos.MessageQueue.ClientSubscribe
 import qualified Com.Factisresearch.Checkpad.Protos.MessageQueue.PublishMessage as PublishMessage
 import qualified Com.Factisresearch.Checkpad.Protos.MessageQueue.ServerMessage as ServerMessage
 import qualified Com.Factisresearch.Checkpad.Protos.MessageQueue.ServerQueues as ServerQueues
+import qualified Mgw.Util.Streams as Streams
 
 ----------------------------------------
 -- SITE-PACKAGES
 ----------------------------------------
-import Control.Monad.Trans.Resource
-import Data.Conduit
-import qualified Data.Conduit.List as CL
 
 ----------------------------------------
 -- STDLIB
@@ -36,10 +34,12 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Text as T
 import qualified Data.Vector as V
 
-parseClientMsg :: (LogMonad m, MonadResourceBase m)
-               => LogId -> Conduit BS.ByteString m ClientMessage
-parseClientMsg logId =
-    pbufParse (T.unpack (unLogId logId)) =$= CL.concatMapM parseClientMsg
+parseClientMsg :: LogId
+               -> Streams.InputStream BS.ByteString
+               -> IO (Streams.InputStream ClientMessage)
+parseClientMsg logId input =
+    do pbufStream <- pbufParse (T.unpack (unLogId logId)) input
+       Streams.concatMapM parseClientMsg pbufStream
     where
       parseClientMsg msg =
           case ClientMessage.subscribe msg of
@@ -71,9 +71,12 @@ parsePublishMessage msg f =
       _ ->
           handleError msg
 
-parseServerMsg :: (LogMonad m, MonadResourceBase m)
-              => LogId -> Conduit BS.ByteString m ServerMessage
-parseServerMsg logId = pbufParse (T.unpack (unLogId logId)) =$= CL.concatMapM parseServerMsg
+parseServerMsg :: LogId
+              -> Streams.InputStream BS.ByteString
+              -> IO (Streams.InputStream ServerMessage)
+parseServerMsg logId input =
+    do pbufStream <- pbufParse (T.unpack (unLogId logId)) input
+       Streams.concatMapM parseServerMsg pbufStream
     where
       parseServerMsg msg =
           case ServerMessage.queues msg of
@@ -92,11 +95,12 @@ instance Preview ServerMessage.ServerMessage where
 instance Preview ClientMessage.ClientMessage where
     previewsPrec = showsPrec
 
-serializeServerMsg :: (LogMonad m, MonadResourceBase m)
-                   => LogId
-                   -> Conduit ServerMessage m BS.ByteString
-serializeServerMsg logId =
-    CL.map serialize =$= pbufSerialize (T.unpack (unLogId logId))
+serializeServerMsg :: LogId
+                   -> Streams.OutputStream BS.ByteString
+                   -> IO (Streams.OutputStream ServerMessage)
+serializeServerMsg logId out =
+    do pbufStream <- pbufSerialize (T.unpack (unLogId logId)) out
+       Streams.contramap serialize pbufStream
     where
       serialize msg =
           case msg of
@@ -124,11 +128,12 @@ serializePublishMessage queueName (Message msgId payload) =
     , PublishMessage.payload = Just (BSL.fromStrict payload)
     }
 
-serializeClientMsg :: (LogMonad m, MonadResourceBase m)
-                   => LogId
-                   -> Conduit ClientMessage m BS.ByteString
-serializeClientMsg logId =
-    CL.map serialize =$= pbufSerialize (T.unpack (unLogId logId))
+serializeClientMsg :: LogId
+                   -> Streams.OutputStream BS.ByteString
+                   -> IO (Streams.OutputStream ClientMessage)
+serializeClientMsg logId out =
+    do pbufStream <- pbufSerialize (T.unpack (unLogId logId)) out
+       Streams.contramap serialize pbufStream
     where
       serialize msg =
           case msg of

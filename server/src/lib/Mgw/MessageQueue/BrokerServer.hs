@@ -3,7 +3,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Mgw.MessageQueue.BrokerServer
-    ( createClientHandler, startBrokerServer, brokerServerMain
+    ( runClientHandler, startBrokerServer, brokerServerMain
     , htf_thisModulesTests )
 where
 
@@ -16,19 +16,18 @@ import Mgw.MessageQueue.LocalBroker
 import Mgw.MessageQueue.Types
 import Mgw.MessageQueue.Protocol
 import Mgw.Util.Concurrent
+import Mgw.Util.Network
 import Mgw.Util.STM
 import Mgw.Util.Tx
 import Mgw.Util.Logging hiding (withLogId)
 import Mgw.Util.Preview
 import Mgw.Util.TestHelper
-import qualified Mgw.Util.Conduit as C
+import qualified Mgw.Util.Streams as Streams
 import qualified Mgw.Util.StrictList as SL
 
 ----------------------------------------
 -- SITE-PACKAGES
 ----------------------------------------
-import Data.Conduit
-import Data.Conduit.Network
 import Safe
 import Test.Framework
 import qualified Data.HashMap.Strict as HashMap
@@ -38,7 +37,7 @@ import qualified Data.Vector as V
 ----------------------------------------
 -- STDLIB
 ----------------------------------------
-import Control.Monad.IO.Class
+import Control.Exception
 import System.Environment
 
 data QueueSubscriber q
@@ -47,44 +46,23 @@ data QueueSubscriber q
       , _qs_subscriber :: SubscriberId
       }
 
-createClientHandler ::
-    (MonadResource m, MonadIO m)
-    => LogId
+runClientHandler ::
+       LogId
     -> MessageBroker q
-    -> IO (C.Source m ServerMessage, C.Sink ClientMessage m ())
-createClientHandler logId mb =
-    do replyChan <- runTx $ newTBMChan ("replyChan_" ++ show logId) 10
+    -> Streams.InputStream ClientMessage
+    -> Streams.OutputStream ServerMessage
+    -> IO ()
+runClientHandler logId mb fromClient toClient =
+    do logInfo (logMsg "Sending queue list")
+       Streams.write (Just $ ServerQueues (V.fromList (HashMap.keys (mb_queues mb)))) toClient
        subscriberIds <- runTx $ newTVar SL.Nil
-       let cleanup =
-             do runTx $ closeTBMChan replyChan
-                subs <- runTx $ readTVar subscriberIds
+       Streams.forM_ fromClient (handleClientMessage subscriberIds) `finally`
+             do subs <- runTx $ readTVar subscriberIds
                 mapM_ (\(QueueSubscriber q subId) -> runTx $ mb_unsubscribeFromQueue mb q subId)
                       (SL.toLazyList subs)
-                return ()
-       return (source replyChan `C.finallyP` cleanup
-              ,sink subscriberIds replyChan `C.finallyP` cleanup)
     where
       logMsg = withLogId logId
-      source replyChan =
-          do liftIO $ logInfo (logMsg "Sending queue list")
-             C.yield (ServerQueues (V.fromList (HashMap.keys (mb_queues mb))))
-             let loop =
-                     do mSrvMsg <- liftIO $ runTx $ readTBMChan replyChan
-                        case mSrvMsg of
-                          Just msg -> C.yield msg >> loop
-                          Nothing -> return ()
-             loop
-      sink subscriberIds replyChan =
-          let loop =
-                  do mMsg <- C.await
-                     case mMsg of
-                       Nothing ->
-                           liftIO $ logNote (logMsg ("client closed connection"))
-                       Just clMsg ->
-                           do liftIO $ handleClientMessage clMsg subscriberIds replyChan
-                              loop
-          in loop
-      handleClientMessage msg subscriberIds replyChan =
+      handleClientMessage subscriberIds msg =
           case msg of
             ClientSubscribe queueName ->
                 case mb_lookupQueue mb queueName of
@@ -94,8 +72,7 @@ createClientHandler logId mb =
                   Just q ->
                       do logInfo (logMsg ("received subscription for " ++ preview queueName))
                          runTx $
-                               do subId <- mb_subscribeToQueue mb q
-                                               (messageHandler queueName replyChan)
+                               do subId <- mb_subscribeToQueue mb q (messageHandler queueName)
                                   modifyTVar' subscriberIds (QueueSubscriber q subId SL.:!)
             ClientPublishMessage queueName msg ->
                 case mb_lookupQueue mb queueName of
@@ -107,27 +84,21 @@ createClientHandler logId mb =
                       do logInfo (logMsg ("received new message " ++ preview (msg_id msg) ++
                                           " for queue " ++ preview queueName))
                          mb_publishMessage mb q msg
-      messageHandler queueName replyChan =
+      messageHandler queueName =
           mkSubscriber (T.pack $ "handler_" ++ show logId ++ "_" ++ preview queueName) $ \msg ->
                        do logInfo (logMsg ("sending message " ++ preview (msg_id msg) ++
                                            " for queue " ++ preview queueName ++
                                            " to client"))
-                          runTx $ writeTBMChanFailIfClosed replyChan
-                                    (ServerPublishMessage queueName msg)
+                          Streams.write (Just (ServerPublishMessage queueName msg)) toClient
 
 startBrokerServer :: Int -> MessageBroker q -> IO ()
 startBrokerServer port mb =
-    runTCPServer (serverSettings port "*") $ \appData ->
+    runTCPServer (serverSettingsTCP port "*") $ \appData ->
         let logId = logIdForNetworkApp appData
-        in labelCurrentThread ("ReceiveThread_" ++ show logId) $
-           do (source, sink) <- createClientHandler logId mb
-              _ <- fork WorkerThread ("SendThread_" ++ show logId) $
-                       runResourceT $
-                         source $= serializeServerMsg logId $$
-                         transPipe liftIO (appSink appData)
-              runResourceT $
-                transPipe liftIO (appSource appData) $=
-                parseClientMsg logId $$ sink
+        in labelCurrentThread ("ClientHandler_" ++ show logId) $
+             do fromClient <- parseClientMsg logId (na_inputStream appData)
+                toClient <- serializeServerMsg logId (na_outputStream appData)
+                runClientHandler logId mb fromClient toClient
 
 brokerServerMain :: IO ()
 brokerServerMain =

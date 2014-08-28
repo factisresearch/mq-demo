@@ -1,6 +1,9 @@
 {-# LANGUAGE CPP, ScopedTypeVariables #-}
 module Mgw.Util.Network (
 
+  NetworkApp(..), ServerSettings, serverSettingsTCP, runTCPServer
+ ,ClientSettings, clientSettingsTCP, runTCPClient,
+
   Net.PortID(..), Net.PortNumber,
 
   NetSock.Socket, SafeSocket,
@@ -27,6 +30,7 @@ import Control.Concurrent.MSem (MSem)
 import System.IO (hPutStrLn, hClose, openFile, IOMode(WriteMode))
 import System.IO.Error (mkIOError, eofErrorType)
 import System.IO.Unsafe (unsafePerformIO)
+import qualified System.IO.Streams as Streams
 import System.Process (proc, std_in, std_out, std_err,
                        StdStream(CreatePipe, UseHandle), terminateProcess)
 import System.Exit (ExitCode(..))
@@ -36,6 +40,7 @@ import System.Directory (createDirectoryIfMissing)
 import qualified Data.List as List
 import Data.Char (isSpace)
 import Data.Maybe (fromMaybe)
+import Data.Int
 import qualified Data.Foldable as F
 import qualified Control.Concurrent.MSem as MSem
 
@@ -45,8 +50,10 @@ import qualified Control.Concurrent.MSem as MSem
 import qualified Network as Net
 import qualified Network.Socket as NetSock
 import qualified Network.BSD as NetBsd
+-- import qualified Network.Socket.ByteString as NetBS
 import qualified Network.Socket.ByteString.Lazy as NetBSL
 
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC
 
@@ -54,6 +61,7 @@ import System.FilePath
 
 import Text.Regex.Posix
 import Safe (readMay)
+import Data.Streaming.Network hiding (runTCPServer, runTCPClient)
 
 ----------------------------------------
 -- LOCAL
@@ -77,6 +85,42 @@ import Mgw.Util.Temp
 import Mgw.Util.Sleep
 import Mgw.Util.String (strip)
 
+data NetworkApp
+    = NetworkApp
+      { na_inputStream :: Streams.InputStream BS.ByteString
+      , na_outputStream :: Streams.OutputStream BS.ByteString
+      , na_sockAddr :: NetSock.SockAddr
+      , na_localAddr :: Maybe NetSock.SockAddr
+      }
+
+runTCPServer :: ServerSettings -> (NetworkApp -> IO ()) -> IO ()
+runTCPServer settings handler =
+    runTCPServerWithHandle settings $ \sock remoteAddr mLocalAddr ->
+        do (istream, ostream) <- Streams.socketToStreams sock
+           let app = NetworkApp
+                     { na_inputStream = istream
+                     , na_outputStream = ostream
+                     , na_sockAddr = remoteAddr
+                     , na_localAddr = mLocalAddr
+                     }
+           handler app
+
+runTCPClient :: ClientSettings -> (NetworkApp -> IO ()) -> IO ()
+runTCPClient settings handler =
+    bracket ("runTCPClient(" ++ show (getHost settings) ++ ":" ++ show (getPort settings))
+            (getSocketFamilyTCP (getHost settings) (getPort settings) (getAddrFamily settings))
+            (Net.sClose . fst)
+            (\(sock, addr) ->
+                do (istream, ostream) <- Streams.socketToStreams sock
+                   let app = NetworkApp
+                             { na_inputStream = istream
+                             , na_outputStream = ostream
+                             , na_sockAddr = addr
+                             , na_localAddr = Nothing
+                             }
+                   handler app)
+
+bufSize :: Int64
 bufSize = 4096
 
 instance Read Net.PortNumber where

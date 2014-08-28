@@ -23,6 +23,7 @@ import Mgw.Util.MD5
 import Mgw.Util.STM
 import Mgw.Util.Tx
 import Mgw.Util.Logging hiding (withLogId)
+import Mgw.Util.Network
 import Mgw.Util.Preview
 import Mgw.Util.Sleep
 import Mgw.Util.TimeSpan
@@ -30,7 +31,6 @@ import Mgw.Util.TimeSpan
 ----------------------------------------
 -- SITE-PACKAGES
 ----------------------------------------
-import Data.Conduit.Network (AppData(..))
 import Data.Hashable
 import Test.Framework
 import Data.HashMap.Strict (HashMap)
@@ -137,10 +137,10 @@ newtype LogId = LogId { unLogId :: T.Text }
 instance Show LogId where
     showsPrec _ (LogId t) = showString (T.unpack t)
 
-logIdForNetworkApp :: AppData m -> LogId
+logIdForNetworkApp :: NetworkApp -> LogId
 logIdForNetworkApp app =
     LogId $ T.pack $ take 6 $ show $ md5s
-            (show (appSockAddr app) ++ show (appLocalAddr app))
+            (show (na_sockAddr app) ++ show (na_localAddr app))
 
 withLogId :: LogId -> String -> String
 withLogId clId msg =

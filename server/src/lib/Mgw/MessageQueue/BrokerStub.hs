@@ -23,16 +23,16 @@ import Mgw.Util.Exception
 import Mgw.Util.STM
 import Mgw.Util.Tx
 import Mgw.Util.Logging hiding (withLogId)
+import Mgw.Util.Network
 import Mgw.Util.Preview
 import Mgw.Util.Sleep
+import qualified Mgw.Util.Streams as Streams
 import Mgw.Util.TestHelper
 import Mgw.Util.TimeSpan
-import qualified Mgw.Util.Conduit as C
 
 ----------------------------------------
 -- SITE-PACKAGES
 ----------------------------------------
-import Data.Conduit.Network
 import Data.HashSet (HashSet)
 import Safe
 import Test.Framework
@@ -139,38 +139,31 @@ createBrokerStub logId (recvChan, sendChan) =
 connectChans ::
     (Show a, Show b)
     => LogId
-    -> C.Source (C.ResourceT IO) a
-    -> C.Sink b (C.ResourceT IO) ()
+    -> Streams.InputStream a
+    -> Streams.OutputStream b
     -> TBMChan a
     -> TBMChan b
     -> IO ()
     -> IO ()
-connectChans logId source sink recvChan sendChan cleanup =
+connectChans logId input output recvChan sendChan cleanup =
     do finishVar <- newTVarIO False
        _ <- fork WorkerThread ("BrokerStubSender_" ++ show logId) (doSend finishVar)
        _ <- fork WorkerThread ("BrokerStubReceiver_" ++ show logId) (doReceive finishVar)
        return ()
     where
       doSend finishVar =
-          C.runResourceT
-               ((sendSource finishVar `C.finallyP` cleanup) C.$$ sink)
-      doReceive finishVar =
-          ignoreIOException $ C.runResourceT
-              (source C.$$ (recvSink `C.finallyP`
-                            do runTx $ writeTVar finishVar True
-                               cleanup))
-      sendSource finishVar =
           let loop = do mClMsg <- liftIO $ runTx $
                                   do finished <- readTVar finishVar
                                      if finished
                                      then return Nothing
                                      else readTBMChan sendChan
+                        Streams.write mClMsg output
                         case mClMsg of
-                          Just clMsg -> C.yield clMsg >> loop
+                          Just _ -> loop
                           Nothing -> return ()
-          in loop
-      recvSink =
-          let loop = do mSrvMsg <- C.await
+          in loop `finally` cleanup
+      doReceive finishVar =
+          let loop = do mSrvMsg <- Streams.read input
                         logDebug ("Received " ++ show mSrvMsg)
                         case mSrvMsg of
                           Just srvMsg ->
@@ -178,38 +171,27 @@ connectChans logId source sink recvChan sendChan cleanup =
                                  loop
                           Nothing ->
                               return ()
-          in loop
+          in loop `finally`
+                 do runTx $ writeTVar finishVar True
+                    cleanup
 
-infiniteRetryClient :: ClientSettings IO -> Application IO -> IO ()
-infiniteRetryClient settings app =
+infiniteRetryClient :: ClientSettings -> (NetworkApp -> IO ()) -> IO ()
+infiniteRetryClient settings action =
     let waitTime = seconds 1
         loop =
-            do runTCPClient settings app `catchSafe`
+            do runTCPClient settings action `catchSafe`
                  (\e -> logDebug ("Error in communication with gateway: " ++ show e))
                logNote ("Connection terminated, relaunching in " ++ show waitTime)
                sleepTimeSpan waitTime
                loop
     in loop
 
-setupBrokerStubChans ::
-    LogId
-    -> (C.Source (C.ResourceT IO) ServerMessage
-       ,C.Sink ClientMessage (C.ResourceT IO) ())
-    -> IO (TBMChan ServerMessage, TBMChan ClientMessage)
-setupBrokerStubChans logId (source, sink) =
-    do sendChan <- runTx $ newTBMChan ("BrokerStubSendChan_" ++ show logId) 20
-       recvChan <- runTx $ newTBMChan ("BrokerStubRecvChan_" ++ show logId) 20
-       connectChans logId source sink recvChan sendChan (runTx $
-                                                         do closeTBMChan sendChan
-                                                            closeTBMChan recvChan)
-       return (recvChan, sendChan)
-
 withBrokerClient :: String -> Int -> (MessageBroker LocalQueue -> IO ()) -> IO ()
 withBrokerClient host port action =
     do sendChan <- runTx $ newTBMChan ("BrokerStubSendChan") 20
        recvChan <- runTx $ newTBMChan ("BorkerStubRecvChan") 20
        _ <- fork WorkerThread "InfiniteRetry" $
-              infiniteRetryClient (clientSettings port hostBytes)
+              infiniteRetryClient (clientSettingsTCP port hostBytes)
                                   (clientApp sendChan recvChan)
        mb <- createBrokerStub (LogId "BrokerStub") (recvChan, sendChan)
        action mb
@@ -218,10 +200,10 @@ withBrokerClient host port action =
       clientApp sendChan recvChan app =
           let logId = logIdForNetworkApp app
               logMsg = withLogId logId
-          in do logInfo (logMsg ("Connected to server " ++ show (appSockAddr app) ++
-                                 ", local addr: " ++ show (appLocalAddr app)))
-                let source = C.transPipe liftIO (appSource app C.$= parseServerMsg logId)
-                    sink = C.transPipe liftIO (serializeClientMsg logId C.=$ appSink app)
+          in do logInfo (logMsg ("Connected to server " ++ show (na_sockAddr app) ++
+                                 ", local addr: " ++ show (na_localAddr app)))
+                source <- parseServerMsg logId (na_inputStream app)
+                sink <- serializeClientMsg logId (na_outputStream app)
                 finishedVar <- newTVarIO False
                 connectChans logId source sink recvChan sendChan
                              (runTx $ writeTVar finishedVar True)
@@ -230,7 +212,6 @@ withBrokerClient host port action =
                       do b <- readTVar finishedVar
                          unless b retryTx
                 logInfo (logMsg "Connection to server finished")
-
       hostBytes = T.encodeUtf8 (T.pack host)
 
 sendClientMain :: IO ()
@@ -283,13 +264,37 @@ recvClientMain =
           do sleepTimeSpan (minutes 5)
              wait
 
+setupLocalBrokerForTest ::
+    String -> MessageBroker LocalQueue -> IO (MessageBroker LocalQueue)
+setupLocalBrokerForTest what serverBroker =
+    do sendChan <- runTx $ newTBMChan (mkLogId' "BrokerStubSendChan") 20
+       recvChan <- runTx $ newTBMChan (mkLogId' "BrokerStubRecvChan") 20
+       let cleanup =
+               runTx (closeTBMChan sendChan >> closeTBMChan recvChan)
+       -- serverFromClient :: InputStream ClientMsg
+       serverFromClient <- Streams.makeInputStream $
+                             do mx <- runTx $ readTBMChan sendChan
+                                return mx
+       -- serverToClient :: OutputStream ServerMsg
+       serverToClient <- Streams.makeOutputStream $ \mx ->
+                           case mx of
+                             Nothing -> cleanup
+                             Just x -> runTx (writeTBMChanFailIfClosed recvChan x)
+       _ <- fork WorkerThread (mkLogId' "server-stub-connector") $
+              runClientHandler (mkLogId "server-test-handler")
+                               serverBroker serverFromClient serverToClient
+       createBrokerStub (mkLogId "stub") (recvChan, sendChan)
+    where
+      mkLogId' s =
+          if null what then s else what ++ "_" ++ s
+      mkLogId s =
+          LogId (T.pack (mkLogId' s))
+
 brokerStubWithBrokerServerTest ::
     (MessageBroker LocalQueue -> MessageBroker LocalQueue -> IO ()) -> IO ()
 brokerStubWithBrokerServerTest fun =
     do serverBroker <- createLocalBroker (LogId "server-local") Nothing queues
-       sourceSink <- createClientHandler (LogId "server") serverBroker
-       chans <- setupBrokerStubChans (LogId "stub-chans") sourceSink
-       localBroker <- createBrokerStub (LogId "stub") chans
+       localBroker <- setupLocalBrokerForTest "local-broker" serverBroker
        fun serverBroker localBroker
     where
       queues = [(testQueue1, transientQueueOpts)
@@ -313,12 +318,8 @@ test_brokerStubWithBrokerServer3 =
 test_brokerStubWithBrokerServer4 :: IO ()
 test_brokerStubWithBrokerServer4 =
     do serverBroker <- createLocalBroker (LogId "server-local") Nothing queues
-       sourceSink1 <- createClientHandler (LogId "server1") serverBroker
-       chans1 <- setupBrokerStubChans (LogId ("stub1-chans")) sourceSink1
-       localBroker1 <- createBrokerStub (LogId "stub1") chans1
-       sourceSink2 <- createClientHandler (LogId "server2") serverBroker
-       chans2 <- setupBrokerStubChans (LogId ("stub2-chans")) sourceSink2
-       localBroker2 <- createBrokerStub (LogId "stub2") chans2
+       localBroker1 <- setupLocalBrokerForTest "local-broker-1" serverBroker
+       localBroker2 <- setupLocalBrokerForTest "local-broker-2" serverBroker
        messageBrokerTest localBroker1 localBroker2
     where
       queues = [(testQueue1, transientQueueOpts)
