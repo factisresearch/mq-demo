@@ -1,0 +1,15 @@
+server/logs
+server/build
+server/.packages
+TAGS
+server/dist
+*.o
+*.hi
+*.chi
+*.chs.h
+server/.cabal-sandbox/
+server/cabal.sandbox.config
+server/cabal.config
+.DS_Store
+server/user.shake
+.#*
