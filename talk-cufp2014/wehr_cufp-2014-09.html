@@ -1,0 +1,823 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+ "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title></title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <style type="text/css">
+table.sourceCode, tr.sourceCode, td.lineNumbers, td.sourceCode {
+  margin: 0; padding: 0; vertical-align: baseline; border: none; }
+table.sourceCode { width: 100%; line-height: 100%; }
+td.lineNumbers { text-align: right; padding-right: 4px; padding-left: 4px; color: #aaaaaa; border-right: 1px solid #aaaaaa; }
+td.sourceCode { padding-left: 5px; }
+code > span.kw { color: #007020; font-weight: bold; }
+code > span.dt { color: #902000; }
+code > span.dv { color: #40a070; }
+code > span.bn { color: #40a070; }
+code > span.fl { color: #40a070; }
+code > span.ch { color: #4070a0; }
+code > span.st { color: #4070a0; }
+code > span.co { color: #60a0b0; font-style: italic; }
+code > span.ot { color: #007020; }
+code > span.al { color: #ff0000; font-weight: bold; }
+code > span.fu { color: #06287e; }
+code > span.er { color: #ff0000; font-weight: bold; }
+  </style>
+  <link rel="stylesheet" type="text/css" media="screen, projection, print"
+    href="http://www.w3.org/Talks/Tools/Slidy2/styles/slidy.css" />
+  <script src="http://www.w3.org/Talks/Tools/Slidy2/scripts/slidy.js.gz"
+    charset="utf-8" type="text/javascript"></script>
+</head>
+<body>
+<div class="section slide level2" id="outline">
+<h1>Outline</h1>
+<ul>
+<li>Presentation
+<ul>
+<li>Introduction of a messaging system writting in Haskell</li>
+<li>Introduction to important Haskell technologies</li>
+</ul></li>
+<li>Hacking
+<ul>
+<li>Write your own extension of the messaging system</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="who-am-i-what-are-we-doing">
+<h1>Who am I? What are we doing?</h1>
+<ul>
+<li>Haskell user since 2013</li>
+<li>Started in academia</li>
+<li>Since 2010: using Haskell in industry</li>
+<li><em>factis research</em>, Freiburg, Germany
+<ul>
+<li>Software for the healthcare market</li>
+<li>Server-side software written in Haskell</li>
+<li>Vast experience with complex mobile applications</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="why-functional-why-haskell">
+<h1>Why functional? Why Haskell?</h1>
+<ul>
+<li>Controllable side-effects</li>
+<li>Modularity</li>
+<li>Testability</li>
+<li>Short but readable code</li>
+<li>Abstraction made easy</li>
+<li>Reusability</li>
+<li>Expressive type-system: if the program compiles it works ;-)</li>
+<li>&quot;World's finest imperative programming language&quot;</li>
+<li>Great support for parallel and concurrent programming</li>
+<li>&quot;Smart people&quot;</li>
+</ul>
+</div>
+<div class="section slide level2" id="what-to-expect-today">
+<h1>What to expect today?</h1>
+<ul>
+<li>Have a look at a commercial software product written in Haskell</li>
+<li>Experience from more than 4 years of commercial software development in Haskell</li>
+<li>Example: Messaging System
+<ul>
+<li>Serialization and persistence</li>
+<li>Network programming</li>
+<li>Concurrent programming</li>
+<li>Testing</li>
+<li>Logging</li>
+<li>Build system</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="commercial-software-development-in-haskell">
+<h1>Commercial software development in Haskell</h1>
+<ul>
+<li><em>Checkpad MED</em>: electronic health record for the iPad/iPhone
+<ul>
+<li>Give doctors instant access to all medical data</li>
+<li>Support collaboration</li>
+<li>Independent from the Hospital Information System</li>
+<li>Demo</li>
+</ul></li>
+<li>Under development since 2010</li>
+<li>Today: several paying customers, several proof-of-concept installations</li>
+</ul>
+</div>
+<div class="section slide level2" id="architecture">
+<h1>Architecture</h1>
+<div class="figure">
+<img src="architektur_001.png" />
+</div>
+</div>
+<div class="section slide level2" id="messaging-system">
+<h1>Messaging System</h1>
+<div class="figure">
+<img src="message-broker_001.png" />
+</div>
+<ul>
+<li>Code at github: https://github.com/factisresearch/mq-demo</li>
+</ul>
+</div>
+<div class="section slide level2" id="key-data-type-messagebroker">
+<h1>Key data type: MessageBroker</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">MessageBroker</span> q
+    <span class="fu">=</span> <span class="dt">MessageBroker</span>
+      { mb_subscribeToQueue <span class="ot">::</span>
+          q <span class="ot">-&gt;</span> <span class="dt">Subscriber</span> <span class="ot">-&gt;</span> <span class="dt">STM</span> <span class="dt">SubscriberId</span>
+      , mb_unsubscribeFromQueue <span class="ot">::</span>
+          q <span class="ot">-&gt;</span> <span class="dt">SubscriberId</span> <span class="ot">-&gt;</span> <span class="dt">STM</span> ()
+      , mb_publishMessage <span class="ot">::</span>
+          q <span class="ot">-&gt;</span> <span class="dt">Message</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+      , mb_lookupQueue <span class="ot">::</span>
+          <span class="dt">QueueName</span> <span class="ot">-&gt;</span> <span class="dt">STM</span> (<span class="dt">Maybe</span> q)
+      ,<span class="ot"> mb_knownQueues ::</span> <span class="dt">STM</span> [<span class="dt">QueueName</span>]
+      }</code></pre>
+<ul>
+<li>Demo</li>
+<li>Code sample: <code>server/src/lib/Mgw/MessageQueue/Types.hs</code></li>
+</ul>
+</div>
+<div class="section slide level2" id="concurrency-with-stm">
+<h1>Concurrency with STM</h1>
+<ul>
+<li>Simple example: bank accounts
+<ul>
+<li><code>transfer acc1 acc2 amount</code>: transfer <code>amount</code> from accout <code>acc1</code> to account <code>acc2</code></li>
+<li><code>transfer</code> should be thread-safe</li>
+<li>In our example: bank accounts live only in memory</li>
+</ul></li>
+<li>Problems with threads
+<ul>
+<li>Deadlocks, Race conditions</li>
+<li>Break modularity</li>
+</ul></li>
+<li>The idea behind STM
+<ul>
+<li>Declare which parts of your code are &quot;atomic&quot;</li>
+<li>The runtime system ensures atomicity (similar to database transactions)</li>
+</ul></li>
+<li>Advantages of Haskell:
+<ul>
+<li>Immutability</li>
+<li>Lazyness</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="bank-account-transfer-with-stm">
+<h1>Bank account transfer with STM</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">transfer ::</span> <span class="dt">Account</span> <span class="ot">-&gt;</span> <span class="dt">Account</span> <span class="ot">-&gt;</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+transfer acc1 acc2 amount <span class="fu">=</span>
+    atomically (<span class="kw">do</span> deposit acc2 amount
+                   withdraw acc1 amount)</code></pre>
+<ul>
+<li><code>atomically :: STM a -&gt; IO a</code>
+<ul>
+<li>Executes the given action atomically</li>
+<li>Argument to <code>atomically</code> is often called &quot;transaction&quot;</li>
+<li><code>STM a</code>: type of a transaction with result type <code>a</code></li>
+<li><code>STM</code> is a monad</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="transaction-variables">
+<h1>Transaction variables</h1>
+<ul>
+<li>STM-actions communicate via transaction variables
+<ul>
+<li><code>TVar a</code>: transaction variable for values of type <code>a</code></li>
+</ul></li>
+<li><code>readTVar :: TVar a -&gt; STM a</code></li>
+<li><code>writeTVar :: TVar a -&gt; a -&gt; STM ()</code></li>
+</ul>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Account</span> <span class="fu">=</span> <span class="dt">TVar</span> <span class="dt">Int</span>
+
+<span class="ot">deposit ::</span> <span class="dt">Account</span> <span class="ot">-&gt;</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">STM</span> ()
+deposit acc amount <span class="fu">=</span>
+    <span class="kw">do</span> bal <span class="ot">&lt;-</span> readTVar acc
+       <span class="kw">let</span> <span class="fu">!</span>newBal <span class="fu">=</span> bal <span class="fu">+</span> amount
+       writeTVar acc newBal
+
+<span class="ot">withdraw ::</span> <span class="dt">Account</span> <span class="ot">-&gt;</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">STM</span> ()
+withdraw acc amount <span class="fu">=</span> deposit acc (<span class="fu">-</span> amount)</code></pre>
+</div>
+<div class="section slide level2" id="blocking-with-stm">
+<h1>Blocking with STM</h1>
+<ul>
+<li>Concurrent programming often requires waiting for a certain condition</li>
+<li>Example: <code>limitedWithdraw</code> should block until there is enough money on the account</li>
+</ul>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">limitedWithdraw ::</span> <span class="dt">Account</span> <span class="ot">-&gt;</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">STM</span> ()
+limitedWithdraw acc amount <span class="fu">=</span>
+    <span class="kw">do</span> bal <span class="ot">&lt;-</span> readTVar acc
+       <span class="kw">if</span> amount <span class="fu">&gt;</span> <span class="dv">0</span> <span class="fu">&amp;&amp;</span> amount <span class="fu">&gt;</span> bal
+       <span class="kw">then</span> retry
+       <span class="kw">else</span> writeTVar acc (bal <span class="fu">-</span> amount)</code></pre>
+<ul>
+<li><code>retry :: STM a</code>
+<ul>
+<li>Aborts the current transation</li>
+<li>Retries it later (if there's a chance it could succeed)</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="combining-transactions">
+<h1>Combining transactions</h1>
+<ul>
+<li>Example: withdraw money from the first account with enough money on it</li>
+</ul>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">limitedWithdrawMany ::</span> [<span class="dt">Account</span>] <span class="ot">-&gt;</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">STM</span> ()
+limitedWithdrawMany [] _ <span class="fu">=</span> retry
+limitedWithdrawMany (acc<span class="fu">:</span>rest) amount <span class="fu">=</span>
+    limitedWithdraw acc amount <span class="ot">`orElse`</span>
+    limitedWithdrawMany rest amount</code></pre>
+<ul>
+<li><code>orElse :: STM a -&gt; STM a -&gt; STM a</code>
+<ul>
+<li><code>orElse t1 t2</code> first executes <code>t1</code></li>
+<li>If <code>t1</code> is successful, so is <code>orElse t1 t2</code></li>
+<li>If <code>t1</code> aborts (by calling <code>retry</code>), then <code>t2</code> is executed</li>
+<li>If <code>t2</code> retries, so does <code>orElse t1 t2</code></li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="summary-of-the-stm-api">
+<h1>Summary of the STM API</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">atomically ::</span> <span class="dt">STM</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> a
+
+<span class="ot">retry  ::</span> <span class="dt">STM</span> a
+<span class="ot">orElse ::</span> <span class="dt">STM</span> a <span class="ot">-&gt;</span> <span class="dt">STM</span> a <span class="ot">-&gt;</span> <span class="dt">STM</span> a
+
+<span class="ot">newTVar   ::</span> a <span class="ot">-&gt;</span> <span class="dt">STM</span> (<span class="dt">TVar</span> a)
+<span class="ot">readTVar  ::</span> <span class="dt">TVar</span> a <span class="ot">-&gt;</span> <span class="dt">STM</span> a
+<span class="ot">writeTVar ::</span> <span class="dt">TVar</span> a <span class="ot">-&gt;</span> a <span class="ot">-&gt;</span> <span class="dt">STM</span> ()</code></pre>
+</div>
+<div class="section slide level2" id="type-system-prevents-disaster-1">
+<h1>Type system prevents disaster (1)</h1>
+<ul>
+<li>Cannot re-execute IO actions</li>
+<li>Type system prevents you from executing IO actions inside a STM transaction</li>
+</ul>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">launchMissiles ::</span> <span class="dt">IO</span> ()
+launchMissiles <span class="fu">=</span> <span class="co">-- ...</span>
+
+bad xv yv <span class="fu">=</span>
+    atomically (<span class="kw">do</span> x <span class="ot">&lt;-</span> readTVar xv
+                   y <span class="ot">&lt;-</span> readTVar yv
+                   when (x <span class="fu">&gt;</span> y) launchMissiles)</code></pre>
+<pre><code>$ ghc Bad.hs
+Bad.hs:12:25:
+    Couldn’t match type ‘IO’ with ‘STM’
+    Expected type: STM ()
+      Actual type: IO ()</code></pre>
+</div>
+<div class="section slide level2" id="type-system-prevents-disaster-2">
+<h1>Type system prevents disaster (2)</h1>
+<ul>
+<li>Accessing transaction variables outside of transactions easily leads to race conditions</li>
+<li>Type system allows access to transaction variables only from within a transaction</li>
+</ul>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">doSomethingBad ::</span> <span class="dt">TVar</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+doSomethingBad v <span class="fu">=</span>
+    <span class="kw">do</span> x <span class="ot">&lt;-</span> readTVar v
+       writeTVar v (x <span class="fu">+</span> <span class="dv">1</span>)</code></pre>
+<pre><code>Bad2.hs:5:13:
+    Couldn&#39;t match type ‘STM’ with ‘IO’
+    Expected type: IO Int
+      Actual type: STM Int
+
+Bad2.hs:6:8:
+    Couldn&#39;t match type ‘STM’ with ‘IO’</code></pre>
+</div>
+<div class="section slide level2" id="some-notes">
+<h1>Some notes</h1>
+<ul>
+<li>Avoid storing thunks in <code>TVar</code>s or make sure to force the thunks directly after the transaction
+<ul>
+<li>Otherwise, you get memory leaks</li>
+</ul></li>
+<li>Use <code>runTx</code> instead of <code>atomically</code>
+<ul>
+<li>Emits a warning if a transaction retries very often</li>
+<li>It's on hackage: <code>stm-stats</code> (<code>runTx</code> is called <code>trackSTM</code> there)</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="example-executing-stm">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_001.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-1">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_002.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-2">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_003.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-3">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_004.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-4">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_005.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-5">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_006.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-6">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_007.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-7">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_008.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-8">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_009.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-9">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_011.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-10">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_012.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-11">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_013.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-12">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_014.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-13">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_015.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-14">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_016.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-15">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_017.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-16">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_018.png" />
+</div>
+</div>
+<div class="section slide level2" id="example-executing-stm-17">
+<h1>Example: Executing STM</h1>
+<div class="figure">
+<img src="STM_019.png" />
+</div>
+</div>
+<div class="section slide level2" id="executing-stm-summary">
+<h1>Executing STM, Summary</h1>
+<ul>
+<li>Execute <code>atomically t</code> optimistically, without locks</li>
+<li><code>writeTVar v x</code> writes to the log, not into memory</li>
+<li><code>readTVar v</code> reads first from the log, and if <code>v</code> is not in the log from the memory</li>
+<li>If <code>readTVar v</code> reads a value from memory, it records the value read in the log.</li>
+<li>Validation at the end of a transaction
+<ul>
+<li>Must be atomic (typically uses locks)</li>
+<li>Validation is successful if all values read during the transaction are still consistent with the main memory.</li>
+</ul></li>
+<li>On successful validation: write values to main memory</li>
+<li><code>retry</code> uses the log to check whether it should re-run the transaction</li>
+</ul>
+</div>
+<div class="section slide level2" id="local-messagebroker">
+<h1>Local MessageBroker</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">createLocalBroker ::</span> <span class="dt">LogId</span>
+                  <span class="ot">-&gt;</span> <span class="dt">Maybe</span> <span class="fu">FilePath</span>
+                  <span class="ot">-&gt;</span> [(<span class="dt">QueueName</span>, <span class="dt">QueueOpts</span>)]
+                  <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">MessageBroker</span> <span class="dt">Queue</span>)
+
+<span class="kw">data</span> <span class="dt">QueuePersistence</span>
+    <span class="fu">=</span> <span class="dt">PersistentQueue</span> <span class="fu">|</span> <span class="dt">TransientQueue</span>
+      <span class="kw">deriving</span> (<span class="kw">Eq</span>, <span class="kw">Show</span>)
+
+<span class="kw">data</span> <span class="dt">QueueOpts</span>
+  <span class="fu">=</span> <span class="dt">QueueOpts</span> {<span class="ot"> qo_persistence ::</span> <span class="dt">QueuePersistence</span> }
+    <span class="kw">deriving</span> (<span class="kw">Eq</span>, <span class="kw">Show</span>)</code></pre>
+<ul>
+<li>Code: <code>server/src/lib/Mgw/MessageQueue/LocalBroker.hs</code></li>
+</ul>
+</div>
+<div class="section slide level2" id="writing-tests-with-htf">
+<h1>Writing tests with HTF</h1>
+<ul>
+<li>Package <code>HTF</code> on Hackage</li>
+<li>Automatically collects your unit tests and QuickCheck properties</li>
+<li>Error messages contain file name and line number</li>
+<li>Diff for failing equality assertions</li>
+<li>Replay of failing QuickCheck properties</li>
+<li>Parallel execution of tests</li>
+<li>Machine-readable output (if desired)</li>
+</ul>
+</div>
+<div class="section slide level2" id="serialization-with-safecopy">
+<h1>Serialization with SafeCopy</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">{-# LANGUAGE TemplateHaskell #-}</span>
+
+deriveSafeCopy <span class="dv">1</span> <span class="ch">&#39;base &#39;&#39;MessageId</span>
+deriveSafeCopy <span class="dv">1</span> <span class="ch">&#39;base &#39;&#39;Message</span>
+
+<span class="ot">safeDecode ::</span> (<span class="kw">Monad</span> m, <span class="dt">SafeCopy</span> a)
+           <span class="ot">=&gt;</span> <span class="dt">BS.ByteString</span> <span class="ot">-&gt;</span> m a
+<span class="ot">safeEncode ::</span> <span class="dt">SafeCopy</span> a <span class="ot">=&gt;</span> a <span class="ot">-&gt;</span> <span class="dt">BS.ByteString</span></code></pre>
+</div>
+<div class="section slide level2" id="migration-with-safecopy">
+<h1>Migration with SafeCopy</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">MessageV1</span> <span class="fu">=</span> <span class="dt">MessageV1</span>
+      {<span class="ot"> msgV1_id ::</span> <span class="fu">!</span><span class="dt">MessageId</span>
+      ,<span class="ot"> msgV1_payload ::</span> <span class="fu">!</span><span class="dt">BS.ByteString</span> }
+<span class="kw">data</span> <span class="dt">Message</span> <span class="fu">=</span> <span class="dt">Message</span>
+      {<span class="ot"> msg_id ::</span> <span class="fu">!</span><span class="dt">MessageId</span>
+      ,<span class="ot"> msg_time ::</span> <span class="fu">!</span>(<span class="dt">Option</span> <span class="dt">ClockTime</span>)
+      ,<span class="ot"> msg_payload ::</span> <span class="fu">!</span><span class="dt">BS.ByteString</span> }
+deriveSafeCopy <span class="dv">1</span> <span class="ch">&#39;base &#39;&#39;MessageId</span>
+deriveSafeCopy <span class="dv">1</span> <span class="ch">&#39;base &#39;&#39;MessageV1</span>
+deriveSafeCopy <span class="dv">2</span> <span class="ch">&#39;extension &#39;&#39;Message</span>
+<span class="kw">instance</span> <span class="dt">Migrate</span> <span class="dt">Message</span> <span class="kw">where</span>
+    <span class="kw">type</span> <span class="dt">MigrateFrom</span> <span class="dt">Message</span> <span class="fu">=</span> <span class="dt">MessageV1</span>
+    migrate msg <span class="fu">=</span>
+      <span class="dt">Message</span> { msg_id <span class="fu">=</span> msgV1_id msg
+              , msg_payload <span class="fu">=</span> msgV1_payload msg
+              , msg_time <span class="fu">=</span> <span class="dt">None</span> }</code></pre>
+</div>
+<div class="section slide level2" id="lazyness-and-memory-leaks">
+<h1>Lazyness and memory leaks</h1>
+<ul>
+<li>Thunks (expression not yet evaluated) may lead to memory leaks</li>
+<li>Difficult to find</li>
+<li>Quiz: Does the following code have a memory leak?
+<ul>
+<li>Assumption: the map of checksums is long-living</li>
+</ul></li>
+</ul>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import</span> <span class="kw">qualified</span> Data.ByteString <span class="kw">as</span> BS
+
+<span class="ot">md5 ::</span> <span class="dt">BS.ByteString</span> <span class="ot">-&gt;</span> <span class="dt">MD5</span>
+md5 bs <span class="fu">=</span> <span class="dt">MD5</span> (md5&#39; bs)
+    <span class="kw">where</span>
+<span class="ot">      md5&#39; ::</span> <span class="dt">BS.ByteString</span> <span class="ot">-&gt;</span> <span class="dt">BS.ByteString</span>
+      md5&#39; <span class="fu">=</span> <span class="fu">...</span>
+<span class="ot">storeMD5 ::</span> <span class="dt">Key</span> <span class="ot">-&gt;</span> <span class="dt">BS.ByteString</span> <span class="ot">-&gt;</span> <span class="dt">Map.Map</span> <span class="dt">Key</span> <span class="dt">MD5</span>
+         <span class="ot">-&gt;</span> <span class="dt">Map.Map</span> <span class="dt">Key</span> <span class="dt">MD5</span>
+storeMD5 key bs <span class="fu">=</span> Map.insert key (md5 bs)</code></pre>
+</div>
+<div class="section slide level2" id="no-memory-leak">
+<h1>No memory leak!</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import</span> <span class="kw">qualified</span> Data.Map.Strict <span class="kw">as</span> Map
+
+<span class="kw">data</span> <span class="dt">MD5</span> <span class="fu">=</span> <span class="dt">MD5</span> {<span class="ot"> unMD5 ::</span> <span class="fu">!</span><span class="dt">BS.ByteString</span> }</code></pre>
+<div class="figure">
+<img src="heap_001.png" />
+</div>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">storeMD5 ::</span> <span class="dt">Key</span> <span class="ot">-&gt;</span> <span class="dt">BS.ByteString</span> <span class="ot">-&gt;</span> <span class="dt">Map.Map</span> <span class="dt">Key</span> <span class="dt">MD5</span>
+         <span class="ot">-&gt;</span> <span class="dt">Map.Map</span> <span class="dt">Key</span> <span class="dt">MD5</span>
+storeMD5 key bs <span class="fu">=</span> Map.insert key (md5 bs)</code></pre>
+</div>
+<div class="section slide level2" id="yes-there-is-a-memory-leak">
+<h1>Yes, there is a memory leak!</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import</span> <span class="kw">qualified</span> Data.Map.Lazy <span class="kw">as</span> Map
+
+<span class="kw">data</span> <span class="dt">MD5</span> <span class="fu">=</span> <span class="dt">MD5</span> {<span class="ot"> unMD5 ::</span> <span class="fu">!</span><span class="dt">BS.ByteString</span> }</code></pre>
+<div class="figure">
+<img src="heap_002.png" />
+</div>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">storeMD5 ::</span> <span class="dt">Key</span> <span class="ot">-&gt;</span> <span class="dt">BS.ByteString</span> <span class="ot">-&gt;</span> <span class="dt">Map.Map</span> <span class="dt">Key</span> <span class="dt">MD5</span>
+         <span class="ot">-&gt;</span> <span class="dt">Map.Map</span> <span class="dt">Key</span> <span class="dt">MD5</span>
+storeMD5 key bs <span class="fu">=</span> Map.insert key (md5 bs)</code></pre>
+</div>
+<div class="section slide level2" id="another-memory-leak">
+<h1>Another memory leak!</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import</span> <span class="kw">qualified</span> Data.Map.Strict <span class="kw">as</span> Map
+
+<span class="kw">data</span> <span class="dt">MD5</span> <span class="fu">=</span> <span class="dt">MD5</span> {<span class="ot"> unMD5 ::</span> <span class="dt">BS.ByteString</span> }</code></pre>
+<div class="figure">
+<img src="heap_003.png" />
+</div>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">storeMD5 ::</span> <span class="dt">Key</span> <span class="ot">-&gt;</span> <span class="dt">BS.ByteString</span> <span class="ot">-&gt;</span> <span class="dt">Map.Map</span> <span class="dt">Key</span> <span class="dt">MD5</span>
+         <span class="ot">-&gt;</span> <span class="dt">Map.Map</span> <span class="dt">Key</span> <span class="dt">MD5</span>
+storeMD5 key bs <span class="fu">=</span> Map.insert key (md5 bs)</code></pre>
+</div>
+<div class="section slide level2" id="our-convention">
+<h1>Our convention</h1>
+<ul>
+<li>Long-living data structures must be strict (more precise: deep strict)</li>
+<li>Requires discipline but works quite good</li>
+</ul>
+</div>
+<div class="section slide level2" id="server-for-our-messagebroker">
+<h1>Server for our MessageBroker</h1>
+<div class="figure">
+<img src="message-broker_002.png" />
+</div>
+</div>
+<div class="section slide level2" id="messages-between-client-and-server">
+<h1>Messages between Client and Server</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">ServerMessage</span>
+   <span class="fu">=</span> <span class="dt">ServerQueues</span> <span class="fu">!</span>(<span class="dt">V.Vector</span> <span class="dt">QueueName</span>)
+   <span class="fu">|</span> <span class="dt">ServerPublishMessage</span> <span class="fu">!</span><span class="dt">QueueName</span> <span class="fu">!</span><span class="dt">Message</span>
+   <span class="kw">deriving</span> (<span class="kw">Show</span>, <span class="kw">Eq</span>)
+
+<span class="kw">data</span> <span class="dt">ClientMessage</span>
+   <span class="fu">=</span> <span class="dt">ClientSubscribe</span> <span class="fu">!</span><span class="dt">QueueName</span>
+   <span class="fu">|</span> <span class="dt">ClientPublishMessage</span> <span class="fu">!</span><span class="dt">QueueName</span> <span class="fu">!</span><span class="dt">Message</span>
+   <span class="kw">deriving</span> (<span class="kw">Show</span>, <span class="kw">Eq</span>)</code></pre>
+</div>
+<div class="section slide level2" id="network-programming-with-io-streams">
+<h1>Network programming with io-streams</h1>
+<ul>
+<li><code>InputStream c</code>: read-only stream of values of type <code>c</code>
+<ul>
+<li><code>read   :: InputStream c -&gt; IO (Maybe c)</code></li>
+<li><code>unRead :: c -&gt; InputStream c -&gt; IO ()</code></li>
+</ul></li>
+<li><code>OutputStream c</code>: write-only stream of values of type <code>c</code>
+<ul>
+<li><code>write :: Maybe c -&gt; OutputStream c -&gt; IO ()</code></li>
+<li>Two things to note:
+<ul>
+<li>Passing <code>Nothing</code> to <code>write</code> does not close the underlying resource</li>
+<li><code>Just</code> values supplied after the first <code>Nothing</code> are usually discarded, but that's up to the implementation of the <code>OutputStream</code></li>
+</ul></li>
+</ul></li>
+<li>Support for converting <code>Handle</code>, <code>Socket</code>, parse functions, ... into streams</li>
+</ul>
+</div>
+<div class="section slide level2" id="simple-io-streams-example">
+<h1>Simple io-streams example</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import</span> <span class="kw">qualified</span> System.IO.Streams <span class="kw">as</span> S
+<span class="kw">import</span> Data.Maybe
+
+<span class="ot">copy ::</span> <span class="dt">S.InputStream</span> c <span class="ot">-&gt;</span> <span class="dt">S.OutputStream</span> c <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+copy input output <span class="fu">=</span> loop
+    <span class="kw">where</span>
+      loop <span class="fu">=</span> <span class="kw">do</span> mx <span class="ot">&lt;-</span> S.read input
+                S.write mx output
+                <span class="kw">if</span> isJust mx <span class="kw">then</span> loop <span class="kw">else</span> <span class="fu">return</span> ()
+
+<span class="ot">copyFile ::</span> <span class="fu">FilePath</span> <span class="ot">-&gt;</span> <span class="fu">FilePath</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+copyFile inputFile outputFile <span class="fu">=</span>
+    S.withFileAsInput inputFile <span class="fu">$</span> \input <span class="ot">-&gt;</span>
+    S.withFileAsOutput outputFile <span class="fu">$</span> \output <span class="ot">-&gt;</span>
+        copy input output</code></pre>
+</div>
+<div class="section slide level2" id="creating-output-streams">
+<h1>Creating output streams</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">makeOutputStream ::</span> (<span class="dt">Maybe</span> c <span class="ot">-&gt;</span> <span class="dt">IO</span> ())
+                 <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">OutputStream</span> c)</code></pre>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import</span> <span class="kw">qualified</span> System.IO.Streams <span class="kw">as</span> S
+<span class="kw">import</span> <span class="kw">qualified</span> Data.ByteString <span class="kw">as</span> BS
+<span class="kw">import</span> System.IO
+
+<span class="ot">handleToOutputStream ::</span> <span class="dt">Handle</span>
+                     <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">S.OutputStream</span> <span class="dt">BS.ByteString</span>)
+handleToOutputStream h <span class="fu">=</span> S.makeOutputStream write
+  <span class="kw">where</span>
+    write mx <span class="fu">=</span> <span class="kw">case</span> mx <span class="kw">of</span>
+                 <span class="kw">Nothing</span> <span class="ot">-&gt;</span> hFlush h
+                 <span class="kw">Just</span> x <span class="ot">-&gt;</span> BS.hPut h x</code></pre>
+</div>
+<div class="section slide level2" id="creating-input-streams">
+<h1>Creating input streams</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">makeInputStream ::</span> <span class="dt">IO</span> (<span class="dt">Maybe</span> a)
+                <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">InputStream</span> a)</code></pre>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import</span> <span class="kw">qualified</span> System.IO.Streams <span class="kw">as</span> S
+<span class="kw">import</span> <span class="kw">qualified</span> Data.ByteString <span class="kw">as</span> BS
+<span class="kw">import</span> System.IO
+
+<span class="ot">handleToInputStream ::</span> <span class="dt">Handle</span>
+                    <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">S.InputStream</span> <span class="dt">BS.ByteString</span>)
+handleToInputStream h <span class="fu">=</span> S.makeInputStream produce
+    <span class="kw">where</span>
+      produce <span class="fu">=</span>
+          <span class="kw">do</span> x <span class="ot">&lt;-</span> BS.hGetSome h <span class="dv">32752</span>
+             <span class="fu">return</span> <span class="fu">$!</span> <span class="kw">if</span> BS.null x <span class="kw">then</span> <span class="kw">Nothing</span>
+                       <span class="kw">else</span> <span class="kw">Just</span> x</code></pre>
+</div>
+<div class="section slide level2" id="the-generator-monad">
+<h1>The Generator monad</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">yield ::</span> c <span class="ot">-&gt;</span> <span class="dt">Generator</span> c () <span class="co">-- generates a single output value</span>
+<span class="ot">fromGenerator ::</span> <span class="dt">Generator</span> c a <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">InputStream</span> c)</code></pre>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">import</span> <span class="kw">qualified</span> System.IO.Streams <span class="kw">as</span> S
+<span class="co">-- Already available</span>
+<span class="ot">fromList ::</span> [c] <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">S.InputStream</span> c)
+fromList l <span class="fu">=</span> S.fromGenerator (<span class="fu">mapM_</span> S.yield l)</code></pre>
+</div>
+<div class="section slide level2" id="transforming-streams-utilities">
+<h1>Transforming streams, utilities</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="fu">map</span><span class="ot"> ::</span> (a <span class="ot">-&gt;</span> b) <span class="ot">-&gt;</span> <span class="dt">InputStream</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">InputStream</span> b)
+<span class="fu">mapM</span><span class="ot"> ::</span> (a <span class="ot">-&gt;</span> <span class="dt">IO</span> b) <span class="ot">-&gt;</span> <span class="dt">InputStream</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">InputStream</span> b)
+
+<span class="ot">contramap ::</span> (a <span class="ot">-&gt;</span> b) <span class="ot">-&gt;</span> <span class="dt">OutputStream</span> b
+          <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">OutputStream</span> a)
+<span class="ot">contramapM ::</span> (a <span class="ot">-&gt;</span> <span class="dt">IO</span> b) <span class="ot">-&gt;</span> <span class="dt">OutputStream</span> b
+           <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">OutputStream</span> a)
+
+<span class="ot">connect ::</span> <span class="dt">InputStream</span> a <span class="ot">-&gt;</span> <span class="dt">OutputStream</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+<span class="ot">supply ::</span> <span class="dt">InputStream</span> a <span class="ot">-&gt;</span> <span class="dt">OutputStream</span> a <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">atEndOfInput ::</span> <span class="dt">IO</span> b <span class="ot">-&gt;</span> <span class="dt">InputStream</span> a
+             <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">InputStream</span> a)
+<span class="ot">atEndOfOutput ::</span> <span class="dt">IO</span> b <span class="ot">-&gt;</span> <span class="dt">OutputStream</span> a
+              <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">OutputStream</span> a)
+
+<span class="co">-- and many more...</span></code></pre>
+</div>
+<div class="section slide level2" id="server-for-messagebroker-abstracting-over-the-network">
+<h1>Server for MessageBroker: abstracting over the network</h1>
+<ul>
+<li>Function handling a single client in the messaging server</li>
+</ul>
+<pre class="sourceCode haskell"><code class="sourceCode haskell">runClientHandler <span class="ot">::</span>
+       <span class="dt">LogId</span>
+    <span class="ot">-&gt;</span> <span class="dt">MessageBroker</span> q
+    <span class="ot">-&gt;</span> <span class="dt">S.InputStream</span> <span class="dt">ClientMessage</span>
+    <span class="ot">-&gt;</span> <span class="dt">S.OutputStream</span> <span class="dt">ServerMessage</span>
+    <span class="ot">-&gt;</span> <span class="dt">IO</span> ()</code></pre>
+<ul>
+<li>Code: <code>server/src/lib/Mgw/MessageQueue/BrokerServer.hs</code></li>
+</ul>
+</div>
+<div class="section slide level2" id="client-for-messagebroker">
+<h1>Client for MessageBroker</h1>
+<pre class="sourceCode haskell"><code class="sourceCode haskell">createBrokerStub <span class="ot">::</span>
+    <span class="dt">LogId</span>
+    <span class="ot">-&gt;</span> (<span class="dt">TBMChan</span> <span class="dt">ServerMessage</span>, <span class="dt">TBMChan</span> <span class="dt">ClientMessage</span>)
+    <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">MessageBroker</span> <span class="dt">Queue</span>)</code></pre>
+<ul>
+<li><code>TBMChan</code>: bounded, closable Channels</li>
+<li>Channels are connected to <code>InputStream ServerMessage</code> and <code>OutputStream ClientMessage</code></li>
+<li>The resulting <code>MessageBroker</code> can handle connection aborts</li>
+<li>Code: <code>server/src/lib/Mgw/MessageQueue/BrokerStub.hs</code></li>
+</ul>
+</div>
+<div class="section slide level2" id="exchanging-data-with-protocolbuffers">
+<h1>Exchanging data with ProtocolBuffers</h1>
+<h3 id="google-protocolbuffers">Google ProtocolBuffers</h3>
+<ul>
+<li>Efficient serialization format</li>
+<li>Language-neutral, platform-neutral</li>
+<li>Allows for forward- and backwards-compatibility</li>
+<li>Packages on Hackage: <code>hprotoc-fork</code>, <code>protocol-buffers-fork</code>, <code>protocol-buffers-descriptor-fork</code></li>
+</ul>
+<h3 id="in-our-code">In our code</h3>
+<ul>
+<li>Definitions: <code>protocols/protos/MessageQueue.proto</code></li>
+<li>Conversions: <code>server/src/lib/Mgw/Message/Protocol.hs</code></li>
+<li>Generated code: <code>server/build/gen-hs/Com/Factisresearch/Checkpad/Protos</code></li>
+</ul>
+</div>
+<div class="section slide level2" id="building-build-systems-with-shake">
+<h1>Building build-systems with shake</h1>
+<ul>
+<li>Shake is a Haskell library for building build-systems
+<ul>
+<li>No predefined build rules</li>
+<li>Rules are given as Haskell code</li>
+</ul></li>
+<li>Dynamic dependencies
+<ul>
+<li>All dependencies arise during a build</li>
+<li>Different from (say) <code>make</code>, where all dependencies are fixed at the beginning</li>
+</ul></li>
+<li>More powerful but also more complex than Cabal</li>
+<li>See http://community.haskell.org/~ndm/downloads/paper-shake_before_building-10_sep_2012.pdf</li>
+</ul>
+</div>
+<div class="section slide level2" id="shake-in-action-1">
+<h1>shake in action (1)</h1>
+<ul>
+<li><code>Action</code>-Monad: tracking of dependencies
+<ul>
+<li>Example: <code>readFile' f</code> introduces a dependency on file <code>f</code></li>
+</ul></li>
+</ul>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">cIncludes ::</span> <span class="fu">FilePath</span> <span class="ot">-&gt;</span> <span class="dt">Action</span> [<span class="fu">FilePath</span>]
+cIncludes x <span class="fu">=</span>
+    <span class="kw">do</span> s <span class="ot">&lt;-</span> readFile&#39; x
+       <span class="fu">return</span> <span class="fu">$</span> mapMaybe parseInclude (<span class="fu">lines</span> s)
+    <span class="kw">where</span>
+      parseInclude line <span class="fu">=</span>
+          <span class="kw">do</span> rest <span class="ot">&lt;-</span> List.stripPrefix <span class="st">&quot;#include \&quot;&quot;</span> line
+             <span class="fu">return</span> <span class="fu">$</span> <span class="fu">takeWhile</span> (<span class="fu">/=</span> <span class="ch">&#39;&quot;&#39;</span>) rest</code></pre>
+</div>
+<div class="section slide level2" id="shake-in-action-2">
+<h1>shake in action (2)</h1>
+<ul>
+<li><code>Rules</code>-Monad: definition of build rules</li>
+</ul>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">(*&gt;) ::</span> <span class="dt">FilePattern</span> <span class="ot">-&gt;</span> (<span class="fu">FilePath</span> <span class="ot">-&gt;</span> <span class="dt">Action</span> ()) <span class="ot">-&gt;</span> <span class="dt">Rules</span> ()
+
+<span class="ot">rules ::</span> <span class="dt">Rules</span> ()
+rules <span class="fu">=</span>
+    <span class="st">&quot;*.o&quot;</span> <span class="fu">*&gt;</span> \out <span class="ot">-&gt;</span>
+        <span class="kw">do</span> <span class="kw">let</span> c <span class="fu">=</span> replaceExtension out <span class="st">&quot;c&quot;</span>
+           need (cIncludes c)
+           system&#39; <span class="st">&quot;gcc&quot;</span> [<span class="st">&quot;-o&quot;</span>, out, <span class="st">&quot;-c&quot;</span>, c]</code></pre>
+</div>
+<div class="section slide level2" id="now-its-your-turn">
+<h1>Now it's your turn!</h1>
+<ul>
+<li>Timestamp for messages
+<ul>
+<li>Messages should carry a timestamp, indicating their creation time</li>
+</ul></li>
+<li>Deregistering subscribers from the server
+<ul>
+<li>With the code shown so for, a client never deregisters a subscriber from the server, even if there are no more local subscribers at the client. This is correct but wastes network traffic.</li>
+<li>Improve the existing code so that clients send a derigistration message to the server as soon as the last local subscriber deregisters itself.</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="now-its-your-turn-1">
+<h1>Now it's your turn!</h1>
+<ul>
+<li>Proxy messsage server
+<ul>
+<li>Write a proxy message server. A proxy message server acts itself as a message server. It connects to several other message server and forwards calls from its client to those servers.</li>
+<li>If a client sends a subscription for a queue <code>Q</code> to the proxy server, the proxy server forwards the subscription to all servers supporting queue <code>Q</code>.</li>
+<li>Similarly, if a client sends a message for queue <code>Q</code> to the proxy server, the proxy server forwards the message to all servers support queue <code>Q</code>.</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="now-its-your-turn-2">
+<h1>Now it's your turn!</h1>
+<ul>
+<li>Synchronouos client API
+<ul>
+<li>With the code shown so for, the API for a message client is asynchronous: a call of <code>mb_subscribe</code> or <code>mb_publish</code> returns directly after the request has been sent out to the network.</li>
+<li>In some situations, it's better to wait until the server has performed the corresponding action (synchronous client API). For example, with a synchronous API, we could get rid of the the calls to <code>sleepTimeSpan</code> in the tests.</li>
+<li>Implement a synchronous client API.</li>
+</ul></li>
+</ul>
+</div>
+<div class="section slide level2" id="summary">
+<h1>Summary</h1>
+<ul>
+<li>Haskell is a great tool for developing commercial software
+<ul>
+<li>High productivity</li>
+<li>Correctness</li>
+<li>Security</li>
+<li>Reusability</li>
+</ul></li>
+<li>Haskell is the &quot;World's finest imperative programming language&quot;</li>
+<li>Haskell is efficient</li>
+</ul>
+</div>
+<div class="section slide level2" id="jobs">
+<h1>Jobs</h1>
+<div class="figure">
+<img src="message-broker_003.png" alt="scale=1" /><p class="caption">scale=1</p>
+</div>
+</div>
+</body>
+</html>

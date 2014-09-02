@@ -1,0 +1,43 @@
+Hello everyone and welcome to the CUFP 2014 tutorial "Haskell in the Real World"!
+
+We are sending you some instructions on how to setup the software for the
+"Haskell in the Real World" tutorial. Please make sure to bring a laptop
+with all required software already installed. We don't want to waste our
+time during the tutorial troubleshooting installation issues.
+
+The source code for the tutorial is at github. Please clone the repository
+first:
+
+$ git clone https://github.com/factisresearch/mq-demo.git
+
+The repository contains all further installation instructions, have a look
+at the file server/README. A short summary is
+
+* You need the *latest* Haskell platform with GHC 7.8.3
+* You need cabal version 1.20 (not included in the platform)
+* You need additional Haskell packages.
+
+As said, all details are in server/README. Please make sure that you
+execute all installation steps. At the end, you should be able to run the
+various programs as follows:
+
+# start a message server
+$ scripts/run MessageQueueServer 9876 STORE @queue1 queue2 --loglevels=DEFAULT:DEBUG
+
+# start a client for receiving messages
+$ scripts/run MessageQueueRecvClient 127.0.0.1 9876 queue1
+
+# send some messages
+$ scripts/run MessageQueueSendClient 127.0.0.1 9876 queue1 msg-id bar
+
+# run the tests
+$ scripts/run MessageQueueTests
+
+If you encounter any problems, please report these as issues of the github
+project at https://github.com/factisresearch/mq-demo/issues. You can also
+write me an email, my address is wehr@cp-med.com.
+
+See you all in Gothenburg next week!
+
+Kind regards,
+Stefan Wehr and Emin Karayel
