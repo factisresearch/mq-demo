@@ -6,7 +6,7 @@ module Mgw.MessageQueue.Types
       QueueName(..), QueueOpts(..), QueuePersistence(..), transientQueueOpts, persistentQueueOpts
     , SubscriberName(..), Subscriber(..), mkSubscriber, SubscriberId(..)
     , MessageId(..), Message(..)
-    , MessageBroker(..), mb_lookupQueue
+    , MessageBroker(..)
     , LogId(..), withLogId, logIdForNetworkApp
     , ServerMessage(..), ClientMessage(..)
     , messageBrokerTest, testQueue1, testQueue2, testQueue3
@@ -33,9 +33,7 @@ import Mgw.Util.TimeSpan
 ----------------------------------------
 import Data.Hashable
 import Test.Framework
-import Data.HashMap.Strict (HashMap)
 import qualified Data.ByteString as BS
-import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Text as T
 import qualified Data.Vector as V
 
@@ -98,15 +96,12 @@ instance Preview SubscriberId where
 
 data MessageBroker q
     = MessageBroker
-      { mb_queues :: !(HashMap QueueName q)
-      , mb_subscribeToQueue :: q -> Subscriber -> STM SubscriberId
+      { mb_subscribeToQueue :: q -> Subscriber -> STM SubscriberId
       , mb_unsubscribeFromQueue :: q -> SubscriberId -> STM ()
       , mb_publishMessage :: q -> Message -> IO ()
+      , mb_lookupQueue :: QueueName -> STM (Maybe q)
+      , mb_knownQueues :: STM [QueueName]
       }
-
-mb_lookupQueue :: MessageBroker q -> QueueName -> Maybe q
-mb_lookupQueue mb name =
-    HashMap.lookup name (mb_queues mb)
 
 data QueuePersistence
     = PersistentQueue
@@ -201,6 +196,8 @@ messageBrokerTest mb1 mb2 =
                  sub = mkSubscriber name action
              return (sub, var)
       lookupQueues mb =
-          do q1 <- assertJust (mb_lookupQueue mb testQueue1)
-             q2 <- assertJust (mb_lookupQueue mb testQueue2)
+          do mq1 <- runTx $ mb_lookupQueue mb testQueue1
+             q1 <- assertJust mq1
+             mq2 <- runTx $ mb_lookupQueue mb testQueue2
+             q2 <- assertJust mq2
              return (q1, q2)

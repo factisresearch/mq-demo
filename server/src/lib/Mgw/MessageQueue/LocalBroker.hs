@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Mgw.MessageQueue.LocalBroker
-    ( createLocalBroker, LocalQueue, lq_name
+    ( createLocalBroker, Queue, q_name
     , htf_thisModulesTests )
 where
 
@@ -36,23 +36,23 @@ import System.FilePath
 import qualified Data.Text as T
 import qualified Data.ByteString as BS
 
-data LocalQueue
-   = LocalQueue
-   { lq_subscribers :: TVar (HashMap SubscriberId Subscriber)
-   , lq_nextSubscriberId :: TVar SubscriberId
-   , lq_persist :: Message -> IO ()
-   , lq_name :: !QueueName
+data Queue
+   = Queue
+   { q_subscribers :: TVar (HashMap SubscriberId Subscriber)
+   , q_nextSubscriberId :: TVar SubscriberId
+   , q_persist :: Message -> IO ()
+   , q_name :: !QueueName
    }
 
-createLocalQueue :: Maybe FilePath -> QueueName -> QueueOpts -> STM LocalQueue
-createLocalQueue mStoreDir name opts =
+createQueue :: Maybe FilePath -> QueueName -> QueueOpts -> STM Queue
+createQueue mStoreDir name opts =
     do subs <- newTVar HashMap.empty
        nextId <- newTVar (SubscriberId 0)
-       return $ LocalQueue
-                  { lq_subscribers = subs
-                  , lq_nextSubscriberId = nextId
-                  , lq_persist = persistFun
-                  , lq_name = name
+       return $ Queue
+                  { q_subscribers = subs
+                  , q_nextSubscriberId = nextId
+                  , q_persist = persistFun
+                  , q_name = name
                   }
     where
       persistFun msg =
@@ -71,34 +71,34 @@ createLocalQueue mStoreDir name opts =
                          Nothing -> logError ("Cannot find unique file name based on " ++ path)
                          Just f -> BS.writeFile f (safeEncode msg)
 
-subscribeToLocalQueue :: LogId -> LocalQueue -> Subscriber -> STM SubscriberId
-subscribeToLocalQueue logId lq sub =
-    do subId@(SubscriberId i) <- readTVar (lq_nextSubscriberId lq)
-       writeTVar (lq_nextSubscriberId lq) $! (SubscriberId (i + 1))
-       modifyTVar' (lq_subscribers lq) (HashMap.insert subId sub)
-       logDebug (logMsg ("Subscription to local queue " ++ preview (lq_name lq) ++
+subscribeToQueue :: LogId -> Queue -> Subscriber -> STM SubscriberId
+subscribeToQueue logId lq sub =
+    do subId@(SubscriberId i) <- readTVar (q_nextSubscriberId lq)
+       writeTVar (q_nextSubscriberId lq) $! (SubscriberId (i + 1))
+       modifyTVar' (q_subscribers lq) (HashMap.insert subId sub)
+       logDebug (logMsg ("Subscription to local queue " ++ preview (q_name lq) ++
                          ": " ++ preview subId))
        return subId
     where
       logMsg = withLogId logId
 
-unsubscribeFromLocalQueue :: LogId -> LocalQueue -> SubscriberId -> STM ()
-unsubscribeFromLocalQueue logId lq subId =
-    do modifyTVar' (lq_subscribers lq) (HashMap.delete subId)
-       logDebug (logMsg ("Unsubscription from local queue " ++ preview (lq_name lq) ++
+unsubscribeFromQueue :: LogId -> Queue -> SubscriberId -> STM ()
+unsubscribeFromQueue logId lq subId =
+    do modifyTVar' (q_subscribers lq) (HashMap.delete subId)
+       logDebug (logMsg ("Unsubscription from local queue " ++ preview (q_name lq) ++
                          ": " ++ preview subId))
     where
       logMsg = withLogId logId
 
-publishMessageToLocalQueue :: LogId -> LocalQueue -> Message -> IO ()
-publishMessageToLocalQueue logId lq msg =
-    do subs <- runTx $ readTVar (lq_subscribers lq)
+publishMessageToQueue :: LogId -> Queue -> Message -> IO ()
+publishMessageToQueue logId lq msg =
+    do subs <- runTx $ readTVar (q_subscribers lq)
        logIOException ("Error persisting message " ++ preview (msg_id msg))
-                      (lq_persist lq msg)
+                      (q_persist lq msg)
        mapM_ publish (HashMap.elems subs)
        logDebug (logMsg ("Published message " ++ preview (msg_id msg) ++
                          " to the following subscribers of local queue " ++
-                         preview (lq_name lq) ++ ": " ++
+                         preview (q_name lq) ++ ": " ++
                          show (map sub_name (HashMap.elems subs))))
     where
       logMsg = withLogId logId
@@ -109,17 +109,20 @@ publishMessageToLocalQueue logId lq msg =
                        show (sub_name sub) ++ ": " ++ show exc)
 
 createLocalBroker ::
-    LogId -> Maybe FilePath -> [(QueueName, QueueOpts)] -> IO (MessageBroker LocalQueue)
+    LogId -> Maybe FilePath -> [(QueueName, QueueOpts)] -> IO (MessageBroker Queue)
 createLocalBroker logId storeDir queues =
     do queueList <- flip mapM queues $ \(name, opts) ->
-                    do q <- runTx (createLocalQueue storeDir name opts)
+                    do q <- runTx (createQueue storeDir name opts)
                        return (name, q)
        let !queueMap = HashMap.fromList queueList
        return $ MessageBroker
-                  { mb_queues = queueMap
-                  , mb_subscribeToQueue = subscribeToLocalQueue logId
-                  , mb_unsubscribeFromQueue = unsubscribeFromLocalQueue logId
-                  , mb_publishMessage = publishMessageToLocalQueue logId
+                  { mb_lookupQueue = \name ->
+                        let mx = HashMap.lookup name queueMap
+                        in return mx
+                  , mb_knownQueues = return (HashMap.keys queueMap)
+                  , mb_subscribeToQueue = subscribeToQueue logId
+                  , mb_unsubscribeFromQueue = unsubscribeFromQueue logId
+                  , mb_publishMessage = publishMessageToQueue logId
                   }
 
 test_localBroker =

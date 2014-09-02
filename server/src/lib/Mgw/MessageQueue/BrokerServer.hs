@@ -30,7 +30,6 @@ import qualified Mgw.Util.StrictList as SL
 ----------------------------------------
 import Safe
 import Test.Framework
-import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Text as T
 import qualified Data.Vector as V
 
@@ -54,7 +53,8 @@ runClientHandler ::
     -> IO ()
 runClientHandler logId mb fromClient toClient =
     do logInfo (logMsg "Sending queue list")
-       Streams.write (Just $ ServerQueues (V.fromList (HashMap.keys (mb_queues mb)))) toClient
+       queues <- runTx $ mb_knownQueues mb
+       Streams.write (Just $ ServerQueues (V.fromList queues)) toClient
        subscriberIds <- runTx $ newTVar SL.Nil
        Streams.forM_ fromClient (handleClientMessage subscriberIds) `finally`
              do subs <- runTx $ readTVar subscriberIds
@@ -65,25 +65,27 @@ runClientHandler logId mb fromClient toClient =
       handleClientMessage subscriberIds msg =
           case msg of
             ClientSubscribe queueName ->
-                case mb_lookupQueue mb queueName of
-                  Nothing ->
-                      logWarn (logMsg ("ignoring subscription to unkown queue: " ++
-                                       preview queueName))
-                  Just q ->
-                      do logInfo (logMsg ("received subscription for " ++ preview queueName))
-                         runTx $
-                               do subId <- mb_subscribeToQueue mb q (messageHandler queueName)
-                                  modifyTVar' subscriberIds (QueueSubscriber q subId SL.:!)
+                runTx $
+                do mq <- mb_lookupQueue mb queueName
+                   case mq of
+                     Nothing ->
+                         logWarn (logMsg ("ignoring subscription to unkown queue: " ++
+                                          preview queueName))
+                     Just q ->
+                         do logInfo (logMsg ("received subscription for " ++ preview queueName))
+                            subId <- mb_subscribeToQueue mb q (messageHandler queueName)
+                            modifyTVar' subscriberIds (QueueSubscriber q subId SL.:!)
             ClientPublishMessage queueName msg ->
-                case mb_lookupQueue mb queueName of
-                  Nothing ->
-                      logWarn (logMsg ("ignoring publication of message " ++
-                                       preview (msg_id msg) ++ " for unknown queue " ++
-                                       preview queueName))
-                  Just q ->
-                      do logInfo (logMsg ("received new message " ++ preview (msg_id msg) ++
-                                          " for queue " ++ preview queueName))
-                         mb_publishMessage mb q msg
+                do mq <- runTx $ mb_lookupQueue mb queueName
+                   case mq of
+                     Nothing ->
+                         logWarn (logMsg ("ignoring publication of message " ++
+                                          preview (msg_id msg) ++ " for unknown queue " ++
+                                          preview queueName))
+                     Just q ->
+                         do logInfo (logMsg ("received new message " ++ preview (msg_id msg) ++
+                                             " for queue " ++ preview queueName))
+                            mb_publishMessage mb q msg
       messageHandler queueName =
           mkSubscriber (T.pack $ "handler_" ++ show logId ++ "_" ++ preview queueName) $ \msg ->
                        do logInfo (logMsg ("sending message " ++ preview (msg_id msg) ++
@@ -91,7 +93,7 @@ runClientHandler logId mb fromClient toClient =
                                            " to client"))
                           Streams.write (Just (ServerPublishMessage queueName msg)) toClient
 
-startBrokerServer :: Int -> MessageBroker -> IO ()
+startBrokerServer :: Int -> MessageBroker q -> IO ()
 startBrokerServer port mb =
     runTCPServer (serverSettingsTCP port "*") $ \appData ->
         let logId = logIdForNetworkApp appData

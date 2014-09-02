@@ -51,7 +51,7 @@ import System.Environment
 createBrokerStub ::
     LogId
     -> (TBMChan ServerMessage, TBMChan ClientMessage)
-    -> IO (MessageBroker LocalQueue)
+    -> IO (MessageBroker Queue)
 createBrokerStub logId (recvChan, sendChan) =
     do logInfo (logMsg "waiting for queue list..")
        mMsg <- runTx $ readTBMChan recvChan
@@ -74,17 +74,18 @@ createBrokerStub logId (recvChan, sendChan) =
                       handleMessage localBroker closeVar serverSubscriptionsVar
                                     recvChan sendChan
              return $ MessageBroker
-                  { mb_queues = mb_queues localBroker
-                  , mb_subscribeToQueue = subscribe serverSubscriptionsVar closeVar
+                  { mb_subscribeToQueue = subscribe serverSubscriptionsVar closeVar
                                               sendChan localBroker
                   , mb_unsubscribeFromQueue = unsubscribe localBroker
                   , mb_publishMessage = publish closeVar sendChan
+                  , mb_lookupQueue = mb_lookupQueue localBroker
+                  , mb_knownQueues = mb_knownQueues localBroker
                   }
       subscribe :: TVar (HashSet QueueName) -> TVar Bool -> TBMChan ClientMessage
-                -> MessageBroker LocalQueue -> LocalQueue -> Subscriber -> STM SubscriberId
+                -> MessageBroker Queue -> Queue -> Subscriber -> STM SubscriberId
       subscribe serverSubscriptionsVar closeVar sendChan localBroker localQueue sub =
           do failIfClosed closeVar
-             let queueName = lq_name localQueue
+             let queueName = q_name localQueue
              subId <- mb_subscribeToQueue localBroker localQueue sub
              set <- readTVar serverSubscriptionsVar
              unless (queueName `HashSet.member` set) $
@@ -100,9 +101,9 @@ createBrokerStub logId (recvChan, sendChan) =
       publish closeVar sendChan localQueue msg =
           do runTx $ failIfClosed closeVar
              logInfo (logMsg ("Sending message " ++ preview (msg_id msg) ++ " for queue " ++
-                              preview (lq_name localQueue) ++ " to server"))
+                              preview (q_name localQueue) ++ " to server"))
              runTx $ writeTBMChanFailIfClosed sendChan
-                       (ClientPublishMessage (lq_name localQueue) msg)
+                       (ClientPublishMessage (q_name localQueue) msg)
       failIfClosed closeVar =
           do close <- readTVar closeVar
              when close (logAndFail (logMsg ("Connection to server definitely closed")))
@@ -124,7 +125,8 @@ createBrokerStub logId (recvChan, sendChan) =
                                          (HashSet.toList subscribedQueues)
                               loop
                        Just (ServerPublishMessage queueName msg) ->
-                           do case mb_lookupQueue localBroker queueName of
+                           do mq <- runTx $ mb_lookupQueue localBroker queueName
+                              case mq of
                                 Nothing ->
                                     logWarn (logMsg ("Received message " ++ preview (msg_id msg) ++
                                                      " for unknown queue " ++ preview queueName))
@@ -186,7 +188,7 @@ infiniteRetryClient settings action =
                loop
     in loop
 
-withBrokerClient :: String -> Int -> (MessageBroker LocalQueue -> IO ()) -> IO ()
+withBrokerClient :: String -> Int -> (MessageBroker Queue -> IO ()) -> IO ()
 withBrokerClient host port action =
     do sendChan <- runTx $ newTBMChan ("BrokerStubSendChan") 20
        recvChan <- runTx $ newTBMChan ("BorkerStubRecvChan") 20
@@ -225,12 +227,14 @@ sendClientMain =
             [host, portStr, queueName, msgId, msg]
                 | Just port <- readMay portStr ->
                     withBrokerClient host port $ \mb ->
-                       case mb_lookupQueue mb (QueueName (T.pack queueName)) of
-                         Nothing -> logError ("Unkown queue: " ++ queueName)
-                         Just q ->
-                             do let bytes = T.encodeUtf8 (T.pack msg)
-                                mb_publishMessage mb q (Message (MessageId (T.pack msgId)) bytes)
-                                sleepTimeSpan (milliseconds 50)
+                        do mq <- runTx $ mb_lookupQueue mb (QueueName (T.pack queueName))
+                           case mq of
+                             Nothing -> logError ("Unkown queue: " ++ queueName)
+                             Just q ->
+                                 do let bytes = T.encodeUtf8 (T.pack msg)
+                                    mb_publishMessage mb q
+                                        (Message (MessageId (T.pack msgId)) bytes)
+                                    sleepTimeSpan (milliseconds 50)
             _ ->
                 do progName <- getProgName
                    logError ("USAGE: " ++ progName ++ " HOST PORT QUEUE MSG_ID MSG")
@@ -246,12 +250,13 @@ recvClientMain =
             [host, portStr, queueName]
                 | Just port <- readMay portStr ->
                     withBrokerClient host port $ \mb ->
-                       case mb_lookupQueue mb (QueueName (T.pack queueName)) of
-                         Nothing -> logError ("Unkown queue: " ++ queueName)
-                         Just q ->
-                             do _ <- runTx $ mb_subscribeToQueue mb q
-                                              (mkSubscriber "recvClient" handleMsg)
-                                wait
+                        do mq <- runTx $ mb_lookupQueue mb (QueueName (T.pack queueName))
+                           case mq of
+                             Nothing -> logError ("Unkown queue: " ++ queueName)
+                             Just q ->
+                                 do _ <- runTx $ mb_subscribeToQueue mb q
+                                                  (mkSubscriber "recvClient" handleMsg)
+                                    wait
             _ ->
                 do progName <- getProgName
                    logError ("USAGE: " ++ progName ++ " HOST PORT QUEUE")
@@ -265,7 +270,7 @@ recvClientMain =
              wait
 
 setupLocalBrokerForTest ::
-    String -> MessageBroker LocalQueue -> IO (MessageBroker LocalQueue)
+    String -> MessageBroker Queue -> IO (MessageBroker Queue)
 setupLocalBrokerForTest what serverBroker =
     do sendChan <- runTx $ newTBMChan (mkLogId' "BrokerStubSendChan") 20
        recvChan <- runTx $ newTBMChan (mkLogId' "BrokerStubRecvChan") 20
@@ -291,7 +296,7 @@ setupLocalBrokerForTest what serverBroker =
           LogId (T.pack (mkLogId' s))
 
 brokerStubWithBrokerServerTest ::
-    (MessageBroker LocalQueue -> MessageBroker LocalQueue -> IO ()) -> IO ()
+    (MessageBroker Queue -> MessageBroker Queue -> IO ()) -> IO ()
 brokerStubWithBrokerServerTest fun =
     do serverBroker <- createLocalBroker (LogId "server-local") Nothing queues
        localBroker <- setupLocalBrokerForTest "local-broker" serverBroker
