@@ -322,9 +322,9 @@ formatHighPrecisionTime (XsdDateTime utc) =
 
 formatFullXsdDateTime :: XsdDateTime -> String
 formatFullXsdDateTime (XsdDateTime (UTCTime day diffTime)) =
-    let diffPicoseconds = fromEnum diffTime
-        fracSeconds = diffPicoseconds `mod` 1000000000000
-        fullSeconds = diffPicoseconds - fracSeconds
+    let diffPicoseconds = toInteger (fromEnum diffTime)
+        fracSeconds = diffPicoseconds `mod` (1000000000000 :: Integer)
+        fullSeconds = fromInteger (diffPicoseconds - fracSeconds)
     in formatTime defaultTimeLocale _FULL_UTCTIME_FORMAT_ (UTCTime day (toEnum fullSeconds))
            ++ "Z" ++ (if fracSeconds > 0 then "+" ++ fixed 12 (show fracSeconds) ++ "ms" else "")
 
