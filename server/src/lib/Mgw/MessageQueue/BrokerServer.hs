@@ -91,13 +91,14 @@ runClientHandler logId mb fromClient toClient =
                                            " to client"))
                           Streams.write (Just (ServerPublishMessage queueName msg)) toClient
 
-startBrokerServer :: Int -> MessageBroker q -> IO ()
+startBrokerServer :: Int -> MessageBroker -> IO ()
 startBrokerServer port mb =
     runTCPServer (serverSettingsTCP port "*") $ \appData ->
         let logId = logIdForNetworkApp appData
         in labelCurrentThread ("ClientHandler_" ++ show logId) $
              do fromClient <- parseClientMsg logId (na_inputStream appData)
-                toClient <- serializeServerMsg logId (na_outputStream appData)
+                toClient' <- serializeServerMsg logId (na_outputStream appData)
+                toClient <- Streams.lockingOutputStream toClient'
                 runClientHandler logId mb fromClient toClient
 
 brokerServerMain :: IO ()
