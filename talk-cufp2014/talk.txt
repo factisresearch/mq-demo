@@ -714,6 +714,21 @@ rules =
 * Haskell is the "World's finest imperative programming language"
 * Haskell is efficient
 
+## HacBerlin 2014
+
+![scale=1](hacberlin-logo.png)
+
+* Haskell Hackathon in Berlin
+* 26 Sep - 28 Sep 2014
+* Highlights:
+    + Haskell hacking
+    + Discussions with enthusiastic haskell programmers
+    + Talks by Andres Löh and José Pedro Magalhães
+    + Barbecue
+* Details: http://www.haskell.org/haskellwiki/HacBerlin2014
+* Please register!
+
+
 ## Jobs
 
 ![scale=1](message-broker_003.png)
