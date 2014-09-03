@@ -48,7 +48,8 @@ RUNNING
 Here are some commands for creating a sample session. Execute
 the commands from different shells:
 
-# start a server
+# start a server, but first create the store directory
+$ mkdir STORE
 $ scripts/run MessageQueueServer 9876 STORE @queue1 queue2 --loglevels=DEFAULT:DEBUG
 
 # start a client for receiving messages
