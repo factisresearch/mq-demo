@@ -38,7 +38,7 @@ fi
 
 function my_stat()
 {
-    if [ "$(uname)" == "Darwin" ]
+    if [ "$(uname)" == "Darwin" ] || [ "$(uname)" == "FreeBSD" ]
     then
         /usr/bin/stat -f '%m' "$@"
     else
