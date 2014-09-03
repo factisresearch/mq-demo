@@ -1,14 +1,14 @@
 ## Outline
 
 * Presentation
-    - Introduction of a messaging system writting in Haskell
+    - Introduction of a messaging system written in Haskell
     - Introduction to important Haskell technologies
 * Hacking
     - Write your own extension of the messaging system
 
-## Who am I? What are we doing?
+## Who am I? What am I doing?
 
-* Haskell user since 2013
+* Haskell user since 2003
 * Started in academia
 * Since 2010: using Haskell in industry
 * *factis research*, Freiburg, Germany
@@ -29,7 +29,7 @@
 * Great support for parallel and concurrent programming
 * "Smart people"
 
-## What to expect today?
+## What to expect from this presentation
 
 * Have a look at a commercial software product written in Haskell
 * Experience from more than 4 years of commercial software development in Haskell
