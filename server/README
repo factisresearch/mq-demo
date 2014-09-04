@@ -28,9 +28,12 @@ Requirements:
   - Make sure that invoking 'cabal --version' indicates that you are using
     version 1.20.* of cabal
 
-* Linux, Mac OSX or FreeBSD. I've never tested the system under Windows. If
-  manage to get it up and running under Windows: great, let us know! You will
-  need at least bash and some other Unix utilities (stat, for example).
+* Linux, Mac OSX or FreeBSD. (For FreeBSD, you'll have to install bash
+  (pkg install bash) and change the shebang (first line) of all scripts
+  from /bin/bash to /usr/local/bin/bash. I've never tested the system
+  under Windows. If manage to get it up and running under Windows: great,
+  let us know! You will need at least bash and some other Unix utilities
+  (stat, for example).
 
 Preparations:
 
